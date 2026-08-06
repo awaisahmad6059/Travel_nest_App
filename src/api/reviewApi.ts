@@ -1,0 +1,13 @@
+import { USE_MOCKS } from "@/config";
+import { request, mockDelay } from "./client";
+import { MOCK_REVIEWS } from "@/mocks/reviews";
+import type { Review } from "@/types";
+
+export const reviewApi = {
+  async getReviews(listingId: string): Promise<Review[]> {
+    if (USE_MOCKS) {
+      return mockDelay(MOCK_REVIEWS.filter((r) => r.listingId === listingId));
+    }
+    return request(`/listings/${listingId}/reviews`);
+  },
+};

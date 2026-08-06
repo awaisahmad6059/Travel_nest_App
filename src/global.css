@@ -1,0 +1,50 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+
+@theme {
+  --color-brand-50: #eaf4ff;
+  --color-brand-100: #d3e7ff;
+  --color-brand-200: #a8d0ff;
+  --color-brand-300: #71b1ff;
+  --color-brand-400: #3d8cff;
+  --color-brand-500: #1a6ef5;
+  --color-brand-600: #0a54d9;
+  --color-brand-700: #0b43b0;
+  --color-brand-800: #0f3a8f;
+  --color-brand-900: #123573;
+
+  --color-accent-50: #fff5ec;
+  --color-accent-100: #ffe8d3;
+  --color-accent-300: #ff9d54;
+  --color-accent-400: #ff7f1d;
+  --color-accent-500: #ff6b00;
+  --color-accent-600: #e85f00;
+  --color-accent-700: #c04d00;
+
+  --color-ink-50: #f6f7f9;
+  --color-ink-100: #eceef2;
+  --color-ink-200: #d5dae2;
+  --color-ink-300: #b0b8c4;
+  --color-ink-400: #848d9c;
+  --color-ink-500: #66707f;
+  --color-ink-600: #4d5565;
+  --color-ink-700: #3a414e;
+  --color-ink-800: #232a36;
+  --color-ink-900: #14181f;
+  --color-ink-950: #0a0c10;
+
+  --color-surface-50: #ffffff;
+  --color-surface-100: #f8fafc;
+  --color-surface-200: #f1f5f9;
+
+  --color-success-50: #ecfdf5;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-warning-500: #f59e0b;
+  --color-danger-50: #fef2f2;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+}
