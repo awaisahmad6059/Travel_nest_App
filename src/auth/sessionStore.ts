@@ -36,18 +36,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   user: null,
 
   async hydrate() {
-    if (get().status !== "idle") return;
+    if (get().status !== "idle") {
+      console.log("[TravelNest] hydrate skipped (status =", get().status, ")");
+      return;
+    }
     set({ status: "loading" });
+    console.log("[TravelNest] hydrate: loading session from storage…");
     try {
-      const raw = await secureStorage.loadSession();
+      const raw = await Promise.race([
+        secureStorage.loadSession(),
+        new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 2000)),
+      ]);
       if (raw) {
         const session = JSON.parse(raw) as AuthSession;
         persist(session);
         set({ session, user: session.user, status: "authenticated" });
+        console.log(
+          "[TravelNest] hydrate: session restored (role =",
+          session.user?.role,
+          ")",
+        );
         return;
       }
       set({ session: null, user: null, status: "signedOut" });
-    } catch {
+      console.log("[TravelNest] hydrate: no stored session -> signedOut");
+    } catch (e) {
+      console.log("[TravelNest] hydrate: error -> signedOut", e);
       set({ session: null, user: null, status: "signedOut" });
     }
   },

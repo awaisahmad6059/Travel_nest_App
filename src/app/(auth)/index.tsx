@@ -1,140 +1,161 @@
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Pressable, Text, View } from "react-native";
 
 import { useSession } from "@/auth/sessionStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { APP_NAME, APP_TAGLINE } from "@/config";
-import { isValidEmail } from "@/utils/format";
+import { Screen } from "@/components/ui/Screen";
+import type { User } from "@/types";
+import { cn } from "@/utils/cn";
 
-const DEMO_FILLS = [
-  { label: "Customer demo", email: "customer@demo.com" },
-  { label: "Supplier demo", email: "supplier@demo.com" },
+const ROLE_TABS: { key: User["role"]; label: string; sub: string }[] = [
+  { key: "customer", label: "🧳 Travel", sub: "Find & book" },
+  { key: "supplier", label: "🏔️ Supplier", sub: "Host & earn" },
 ];
 
+const DEMO_EMAIL: Record<User["role"], string> = {
+  customer: "customer@demo.com",
+  supplier: "supplier@demo.com",
+};
+
 export default function LoginScreen() {
-  const { signIn } = useSession();
   const router = useRouter();
+  const { signIn } = useSession();
+  const [role, setRole] = useState<User["role"]>("customer");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
-  async function onSubmit() {
-    if (!isValidEmail(email)) {
-      setError("Please enter a valid email address.");
+  async function handleSignIn() {
+    if (!email.trim() || !password) {
+      setError("Please enter your email and password.");
       return;
     }
-    if (!password) {
-      setError("Please enter your password.");
-      return;
-    }
+    setLoading(true);
     setError(null);
-    setSubmitting(true);
     try {
       await signIn(email, password);
-      // Role-based redirect happens automatically via Stack.Protected guards.
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+      setError(e instanceof Error ? e.message : "Sign in failed. Try again.");
     } finally {
-      setSubmitting(false);
+      setLoading(false);
+    }
+  }
+
+  async function handleDemoLogin() {
+    const demoEmail = DEMO_EMAIL[role];
+    setEmail(demoEmail);
+    setPassword("demo1234");
+    setLoading(true);
+    setError(null);
+    try {
+      await signIn(demoEmail, "demo1234");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Demo sign in failed.");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-surface-100">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerClassName="flex-1 justify-center px-6 py-10"
-          keyboardShouldPersistTaps="handled"
-        >
-          <View className="items-center mb-8">
-            <View className="h-20 w-20 rounded-3xl bg-brand-600 items-center justify-center shadow-lg">
-              <Text className="text-4xl">✈️</Text>
-            </View>
-            <Text className="mt-4 text-3xl font-extrabold text-ink-900">
-              {APP_NAME}
+    <Screen contentContainerClassName="flex-1 justify-center px-6 py-10">
+      <View className="items-center mb-6">
+        <View className="h-20 w-20 rounded-3xl bg-brand-500 items-center justify-center mb-4">
+          <Text className="text-4xl">🧳</Text>
+        </View>
+        <Text className="text-3xl font-extrabold text-ink-900 text-center">
+          TravelNest
+        </Text>
+        <Text className="text-lg text-ink-600 mt-2 text-center">
+          Sign in to continue
+        </Text>
+      </View>
+
+      <View className="flex-row bg-ink-100 rounded-xl p-1 mb-6">
+        {ROLE_TABS.map((tab) => (
+          <Pressable
+            key={tab.key}
+            onPress={() => setRole(tab.key)}
+            className={cn(
+              "flex-1 py-2.5 rounded-lg items-center",
+              role === tab.key ? "bg-white" : "",
+            )}
+          >
+            <Text
+              className={cn(
+                "text-sm font-bold",
+                role === tab.key ? "text-brand-600" : "text-ink-500",
+              )}
+            >
+              {tab.label}
             </Text>
-            <Text className="mt-1 text-sm text-ink-500 text-center">
-              {APP_TAGLINE}
-            </Text>
-          </View>
+          </Pressable>
+        ))}
+      </View>
 
-          <View className="gap-4">
-            <Input
-              label="Email"
-              placeholder="you@example.com"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-            />
-            <Input
-              label="Password"
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+      <View className="gap-4">
+        <Input
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          placeholder={role === "supplier" ? "supplier@demo.com" : "you@example.com"}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Input
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          placeholder="••••••••"
+          secureTextEntry
+        />
 
-            {error ? (
-              <View className="bg-danger-50 rounded-xl px-4 py-3">
-                <Text className="text-sm text-danger-600">{error}</Text>
-              </View>
-            ) : null}
+        <Pressable onPress={() => router.push("/forgot-password")}>
+          <Text className="text-sm font-semibold text-brand-600 text-right">
+            Forgot password?
+          </Text>
+        </Pressable>
 
-            <Button
-              title="Sign in"
-              size="lg"
-              block
-              loading={submitting}
-              onPress={onSubmit}
-            />
+        {error ? <Text className="text-sm text-danger-600">{error}</Text> : null}
 
-            <Pressable onPress={() => router.push("/forgot-password")}>
-              <Text className="text-center text-sm font-medium text-brand-600">
-                Forgot password?
-              </Text>
-            </Pressable>
-          </View>
+        <Button
+          title="Sign In"
+          size="lg"
+          block
+          loading={loading}
+          onPress={handleSignIn}
+        />
 
-          <View className="mt-8">
-            <Text className="text-center text-xs text-ink-400 mb-3">
-              DEMO — tap to fill credentials (any password works)
-            </Text>
-            <View className="flex-row justify-center gap-3">
-              {DEMO_FILLS.map((f) => (
-                <Pressable
-                  key={f.email}
-                  onPress={() => {
-                    setEmail(f.email);
-                    setPassword("demo1234");
-                    setError(null);
-                  }}
-                  className="bg-white border border-ink-200 rounded-full px-4 py-2"
-                >
-                  <Text className="text-xs font-medium text-ink-700">{f.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+        <View className="flex-row items-center gap-3 my-1">
+          <View className="h-px flex-1 bg-ink-100" />
+          <Text className="text-xs text-ink-400">or</Text>
+          <View className="h-px flex-1 bg-ink-100" />
+        </View>
 
-          <View className="mt-8 flex-row justify-center items-center gap-1">
-            <Text className="text-sm text-ink-500">New to {APP_NAME}?</Text>
-            <Link href="/register" asChild>
-              <Pressable>
-                <Text className="text-sm font-semibold text-brand-600">Create account</Text>
-              </Pressable>
-            </Link>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <Button
+          title="⚡ Demo Login (one tap)"
+          variant="accent"
+          size="lg"
+          block
+          disabled={loading}
+          onPress={handleDemoLogin}
+        />
+        <Text className="text-xs text-ink-400 text-center">
+          {role === "supplier"
+            ? "Logs in as supplier@demo.com → Supplier Panel"
+            : "Logs in as customer@demo.com → Customer Panel"}
+        </Text>
+      </View>
+
+      <View className="flex-row justify-center gap-1 mt-8">
+        <Text className="text-ink-500">Don&apos;t have an account?</Text>
+        <Pressable onPress={() => router.push("/register")}>
+          <Text className="font-semibold text-brand-600">Create one</Text>
+        </Pressable>
+      </View>
+    </Screen>
   );
 }

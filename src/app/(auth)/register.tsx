@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useSession } from "@/auth/sessionStore";
@@ -33,6 +33,7 @@ export default function RegisterScreen() {
       await signUp({ name: name.trim(), email, password, role });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+    } finally {
       setSubmitting(false);
     }
   }

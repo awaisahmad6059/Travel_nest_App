@@ -1,0 +1,82 @@
+Starting project at E:\ReactNativeProjects\TravelNest-APP
+Using src/app as the root directory for Expo Router.
+ WARN  Failed to download the latest version of React Native DevTools. Using a fallback version instead. Connect to the internet or check your network settings.
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+
+2 packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.
+Android Bundled 46805ms node_modules\expo-router\entry.js (2049 modules)
+ LOG  [TravelNest] hydrate: loading session from storage…
+ LOG  [TravelNest] hydrate: no stored session -> signedOut
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+Android Bundled 222ms node_modules\expo-router\entry.js (1 module)
+ LOG  [TravelNest] hydrate: loading session from storage…
+ LOG  [TravelNest] hydrate: no stored session -> signedOut
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+ LOG  [TravelNest] hydrate skipped (status = signedOut )
+Android Bundled 245ms node_modules\expo-router\entry.js (1 module)
+Android Bundled 227ms node_modules\expo-router\entry.js (1 module)
+ LOG  [TravelNest] hydrate: loading session from storage…
+ LOG  [TravelNest] hydrate: no stored session -> signedOut
+Web Bundled 53130ms node_modules\expo-router\entry.js (1179 modules)
+λ Bundled 53194ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1216 modules)
+Web Bundled 25901ms node_modules\expo-router\entry.js (1184 modules)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  LOG  [TravelNest] hydrate: loading session from storage…
+Web  WARN  secureStorage.loadSession failed [TypeError: ExpoSecureStore.default.getValueWithKeyAsync is not a function]
+Web  LOG  [TravelNest] hydrate: no stored session -> signedOut
+Android Bundled 2393ms node_modules\expo-router\entry.js (1 module)
+Web  WARN  secureStorage.saveSession failed [TypeError: ExpoSecureStore.default.setValueWithKeyAsync is not a function]
+ LOG  [TravelNest] hydrate: loading session from storage…
+ LOG  [TravelNest] hydrate: session restored (role = customer )
+Android Bundled 910ms node_modules\expo-router\entry.js (1 module)
+ LOG  [TravelNest] hydrate: loading session from storage…
+ LOG  [TravelNest] hydrate: session restored (role = customer )
+λ Bundled 5971ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1 module)
+Web Bundled 7972ms node_modules\expo-router\entry.js (1 module)
+Web Bundled 292ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  LOG  [TravelNest] hydrate: loading session from storage…
+Web  WARN  secureStorage.loadSession failed [TypeError: ExpoSecureStore.default.getValueWithKeyAsync is not a function]
+Web  LOG  [TravelNest] hydrate: no stored session -> signedOut
+ LOG  [TravelNest] hydrate skipped (status = authenticated )
+ LOG  [TravelNest] hydrate skipped (status = authenticated )
+Android Bundled 339ms node_modules\expo-router\entry.js (1 module)
+ LOG  [TravelNest] hydrate: loading session from storage…
+ LOG  [TravelNest] hydrate: session restored (role = customer )
+Web  LOG  [TravelNest] hydrate skipped (status = signedOut )
+λ Bundled 36968ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1 module)
+Web Bundled 39963ms node_modules\expo-router\entry.js (1 module)
+Web Bundled 35406ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  LOG  [TravelNest] hydrate: loading session from storage…
+Web  WARN  secureStorage.loadSession failed [TypeError: ExpoSecureStore.default.getValueWithKeyAsync is not a function]
+Web  LOG  [TravelNest] hydrate: no stored session -> signedOut
+Web  WARN  secureStorage.saveSession failed [TypeError: ExpoSecureStore.default.setValueWithKeyAsync is not a function]

@@ -1,6 +1,6 @@
 import { PropsWithChildren } from "react";
 import { ScrollView, View, type ScrollViewProps } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { cn } from "@/utils/cn";
 
 /**
