@@ -46,4 +46,13 @@ export interface CreateBookingInput {
   items: BookingItem[];
   travelers: Traveler[];
   total: Price;
+  /**
+   * Inventory hold id (API_HANDOFF.md §4.2) — required by the real backend.
+   * Mock mode ignores it.
+   */
+  holdId?: string;
+  /** Payment gateway token produced by the payment step — passed to /bookings. */
+  paymentToken?: string;
+  /** Free-text special requirements (optional). */
+  specialRequirements?: string;
 }

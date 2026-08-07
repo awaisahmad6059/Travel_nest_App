@@ -8,6 +8,7 @@ export const reviewApi = {
     if (USE_MOCKS) {
       return mockDelay(MOCK_REVIEWS.filter((r) => r.listingId === listingId));
     }
+    // Planned: GET /listings/:id/reviews (§5.2)
     return request(`/listings/${listingId}/reviews`);
   },
 };

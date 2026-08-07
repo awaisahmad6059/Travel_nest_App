@@ -3,9 +3,11 @@ import { request, mockDelay } from "./client";
 import type { Coupon, PaymentMethod, PaymentResult } from "@/types";
 
 /**
- * Payments — STUBBED. The real gateway SDK + backend payment module arrive
- * later. These functions return plausible mock data so the checkout UI flows
- * work end-to-end, and share the exact shapes the future API will use.
+ * Payments — STUBBED (API_HANDOFF.md).
+ * The real backend has no payment gateway module yet: checkout passes a
+ * `payment_token` straight into POST /bookings. Coupons are planned as
+ * `POST /checkout/apply-coupon` (§5.2). These functions return plausible
+ * mock data so the checkout UI flows work end-to-end.
  */
 
 export const MOCK_PAYMENT_METHODS: PaymentMethod[] = [
@@ -17,7 +19,8 @@ export const MOCK_PAYMENT_METHODS: PaymentMethod[] = [
 export const paymentApi = {
   async getPaymentMethods(): Promise<PaymentMethod[]> {
     if (USE_MOCKS) return mockDelay(MOCK_PAYMENT_METHODS, 300);
-    return request("/payment-methods");
+    // No ready endpoint — keep local saved methods for now.
+    return mockDelay(MOCK_PAYMENT_METHODS, 300);
   },
 
   async applyCoupon(code: string): Promise<Coupon | null> {
@@ -33,7 +36,8 @@ export const paymentApi = {
       }
       return mockDelay(hit, 500);
     }
-    return request(`/coupons/validate?code=${encodeURIComponent(code)}`);
+    // Planned: POST /checkout/apply-coupon (§5.2)
+    return request(`/checkout/apply-coupon?code=${encodeURIComponent(code)}`);
   },
 
   /** Simulates charging the card via the (future) payment gateway. */
@@ -60,6 +64,14 @@ export const paymentApi = {
         1600,
       );
     }
-    return request("/payments/charge", { method: "POST", body: JSON.stringify(input) });
+    // No gateway module in the handoff — the payment_token is passed to /bookings.
+    return mockDelay(
+      {
+        status: "success",
+        transactionId: `tok_stripe_sim_${Date.now()}`,
+        message: "Payment successful",
+      },
+      300,
+    );
   },
 };

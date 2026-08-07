@@ -3,6 +3,13 @@ import { request, mockDelay } from "./client";
 import { MOCK_SUPPLIER_BOOKINGS } from "@/mocks/bookings";
 import { MOCK_DASHBOARD_STATS, MOCK_PAYOUTS } from "@/mocks/dashboard";
 import { MOCK_SUPPLIERS } from "@/mocks/suppliers";
+import {
+  BookingDTO,
+  bookingDtoToBooking,
+  payoutLedgerToSummary,
+  PayoutLedgerDTO,
+  PayoutHistoryItemDTO,
+} from "./contracts";
 import type {
   Booking,
   DashboardStats,
@@ -11,8 +18,14 @@ import type {
 } from "@/types";
 
 /**
- * Supplier services — dashboard, booking inbox, payouts.
- * Mock inbox lives in an in-memory store so confirm/reject persist for the session.
+ * Supplier services (API_HANDOFF.md §4.3, §4.6, §5.3) — dashboard, booking
+ * inbox and payouts.
+ *
+ * Ready endpoints used here:
+ *   GET /bookings/supplier/list?supplier_id=   (inbox)
+ *   GET /payouts/ledger/:supplierId            (balance)
+ *   GET /payouts/history/:supplierId           (history)
+ * Confirm/reject and the dashboard are planned (§5.3).
  */
 const mockSupplierBookingStore: Booking[] = [...MOCK_SUPPLIER_BOOKINGS];
 
@@ -30,17 +43,25 @@ export const supplierApi = {
         recentBookings: mockSupplierBookingStore.slice(0, 4),
       });
     }
-    return request(`/suppliers/${supplierId}/dashboard`);
+    // Planned: GET /supplier/dashboard (§5.3)
+    return request(`/supplier/dashboard?supplier_id=${encodeURIComponent(supplierId)}`);
   },
 
   async getBookingInbox(supplierId: string): Promise<Booking[]> {
     if (USE_MOCKS) return mockDelay(mockSupplierBookingStore);
-    return request(`/suppliers/${supplierId}/bookings`);
+    const dtos = await request<BookingDTO[]>(
+      `/bookings/supplier/list?supplier_id=${encodeURIComponent(supplierId)}`,
+    );
+    return dtos.map(bookingDtoToBooking);
   },
 
   async getPayouts(supplierId: string): Promise<PayoutSummary> {
     if (USE_MOCKS) return mockDelay(MOCK_PAYOUTS);
-    return request(`/suppliers/${supplierId}/payouts`);
+    const [ledger, history] = await Promise.all([
+      request<PayoutLedgerDTO>(`/payouts/ledger/${encodeURIComponent(supplierId)}`),
+      request<PayoutHistoryItemDTO[]>(`/payouts/history/${encodeURIComponent(supplierId)}`),
+    ]);
+    return payoutLedgerToSummary(ledger, history);
   },
 
   async confirmBooking(id: string): Promise<Booking> {
@@ -51,7 +72,11 @@ export const supplierApi = {
       mockSupplierBookingStore[mockSupplierBookingStore.indexOf(booking)] = updated;
       return mockDelay(updated);
     }
-    return request(`/bookings/${id}/confirm`, { method: "POST" });
+    // Planned: POST /bookings/:id/confirm (§5.3)
+    const dto = await request<BookingDTO>(`/bookings/${encodeURIComponent(id)}/confirm`, {
+      method: "POST",
+    });
+    return bookingDtoToBooking(dto);
   },
 
   async rejectBooking(id: string, reason: string): Promise<Booking> {
@@ -62,9 +87,11 @@ export const supplierApi = {
       mockSupplierBookingStore[mockSupplierBookingStore.indexOf(booking)] = updated;
       return mockDelay(updated);
     }
-    return request(`/bookings/${id}/reject`, {
+    // Planned: POST /bookings/:id/reject (§5.3)
+    const dto = await request<BookingDTO>(`/bookings/${encodeURIComponent(id)}/reject`, {
       method: "POST",
       body: JSON.stringify({ reason }),
     });
+    return bookingDtoToBooking(dto);
   },
 };

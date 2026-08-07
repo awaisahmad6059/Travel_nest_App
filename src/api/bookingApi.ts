@@ -1,10 +1,22 @@
 import { USE_MOCKS } from "@/config";
 import { request, mockDelay } from "./client";
 import { MOCK_BOOKINGS } from "@/mocks/bookings";
+import {
+  BookingDTO,
+  bookingDtoToBooking,
+  CheckoutRequest,
+} from "./contracts";
 import type { Booking, CreateBookingInput } from "@/types";
 
 /**
- * Bookings service — My Bookings (customer) and the Booking Inbox (supplier).
+ * Bookings service (API_HANDOFF.md §4.3) — My Bookings (customer) and the
+ * Booking Inbox (supplier).
+ *
+ * Checkout uses the documented request shape:
+ *   POST /bookings  { hold_id, lead_name, lead_email, lead_phone,
+ *                     special_requirements, payment_token }
+ * The booking response carries `qr_voucher_code` which must be cached offline
+ * so My Bookings works without a connection.
  *
  * In mock mode bookings live in an in-memory store seeded from MOCK_BOOKINGS,
  * so bookings created during the session are also retrievable by id.
@@ -14,15 +26,21 @@ const mockBookingStore: Booking[] = [...MOCK_BOOKINGS];
 export const bookingApi = {
   async getMyBookings(): Promise<Booking[]> {
     if (USE_MOCKS) return mockDelay(mockBookingStore);
-    return request("/bookings");
+    // Planned: GET /bookings?status=UPCOMING|COMPLETED (§5.2)
+    const dtos = await request<BookingDTO[]>("/bookings");
+    return dtos.map(bookingDtoToBooking);
   },
 
-  async getBooking(id: string): Promise<Booking | null> {
+  async getBooking(idOrRef: string): Promise<Booking | null> {
     if (USE_MOCKS) {
-      const booking = mockBookingStore.find((b) => b.id === id);
+      const booking = mockBookingStore.find((b) => b.id === idOrRef);
       return mockDelay(booking ?? null, 300);
     }
-    return request(`/bookings/${id}`);
+    // GET /bookings/:ref accepts the booking_reference or the id.
+    const dto = await request<BookingDTO | null>(
+      `/bookings/${encodeURIComponent(idOrRef)}`,
+    );
+    return dto ? bookingDtoToBooking(dto) : null;
   },
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -44,7 +62,28 @@ export const bookingApi = {
       mockBookingStore.unshift(created);
       return mockDelay(created, 900);
     }
-    return request("/bookings", { method: "POST", body: JSON.stringify(input) });
+    const lead = input.travelers[0];
+    if (!input.holdId) {
+      throw new Error(
+        "Missing inventory hold — hold a slot first via availabilityApi.hold() before checkout.",
+      );
+    }
+    if (!input.paymentToken) {
+      throw new Error("Missing payment token — complete payment before checkout.");
+    }
+    const body: CheckoutRequest = {
+      hold_id: input.holdId,
+      lead_name: lead?.name ?? "",
+      lead_email: lead?.email ?? "",
+      lead_phone: lead?.phone ?? "",
+      special_requirements: input.specialRequirements,
+      payment_token: input.paymentToken,
+    };
+    const dto = await request<BookingDTO>("/bookings", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    return bookingDtoToBooking(dto);
   },
 
   async cancelBooking(id: string, reason?: string): Promise<Booking> {
@@ -55,9 +94,11 @@ export const bookingApi = {
       mockBookingStore[mockBookingStore.indexOf(booking)] = updated;
       return mockDelay(updated);
     }
-    return request(`/bookings/${id}/cancel`, {
+    // Planned: POST /bookings/:id/cancel (§5.2)
+    const dto = await request<BookingDTO>(`/bookings/${encodeURIComponent(id)}/cancel`, {
       method: "POST",
       body: JSON.stringify({ reason }),
     });
+    return bookingDtoToBooking(dto);
   },
 };
