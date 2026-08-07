@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -12,10 +12,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { ListingRow } from "@/components/ListingRow";
 import { AppMap } from "@/components/AppMap";
-import { CATEGORIES } from "@/constants/categories";
+import {
+  CATEGORIES,
+  categoryEmoji,
+  categoryLabel,
+} from "@/constants/categories";
 import { useAutocomplete, useSearch } from "@/features/search/useSearch";
 import { cn } from "@/utils/cn";
-import type { CategoryId, SearchFilters, SearchSort } from "@/types";
+import type { CategoryId, Listing, SearchFilters, SearchSort } from "@/types";
 
 export default function SearchScreen() {
   const params = useLocalSearchParams<{ category?: string; sort?: string }>();
@@ -42,6 +46,16 @@ export default function SearchScreen() {
 
   const items = data?.items ?? [];
   const suggestions = autocomplete.data ?? { destinations: [], listings: [] };
+
+  const grouped = useMemo(() => {
+    const map = new Map<CategoryId, Listing[]>();
+    for (const item of items) {
+      const arr = map.get(item.category) ?? [];
+      arr.push(item);
+      map.set(item.category, arr);
+    }
+    return Array.from(map.entries());
+  }, [items]);
 
   function commitSearch() {
     setCommittedQuery(query);
@@ -158,12 +172,24 @@ export default function SearchScreen() {
           message="Try a different destination or clear some filters."
         />
       ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(l) => l.id}
-          contentContainerClassName="px-5 gap-4"
-          renderItem={({ item }) => <ListingRow listing={item} />}
-        />
+        <View className="pb-8">
+          {grouped.map(([cat, catItems]) => (
+            <View key={cat} className="mt-2">
+              <View className="flex-row items-center gap-2 px-5 pt-3 pb-2">
+                <Text className="text-base">{categoryEmoji(cat)}</Text>
+                <Text className="text-base font-bold text-ink-900">
+                  {categoryLabel(cat)}
+                </Text>
+                <Text className="text-xs text-ink-400">({catItems.length})</Text>
+              </View>
+              <View className="px-5 gap-4">
+                {catItems.map((l) => (
+                  <ListingRow key={l.id} listing={l} />
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
       )}
 
       {/* Filters sheet */}

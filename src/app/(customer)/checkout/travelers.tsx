@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -10,6 +10,7 @@ import { useCart } from "@/store/cartStore";
 import { useCheckoutStore } from "@/store/checkoutStore";
 import { useSession } from "@/auth/sessionStore";
 import { isValidEmail, isValidPhone } from "@/utils/format";
+import { cn } from "@/utils/cn";
 
 export default function TravelersScreen() {
   const router = useRouter();
@@ -17,20 +18,44 @@ export default function TravelersScreen() {
   const { user } = useSession();
   const {
     travelers,
+    contactName,
     contactEmail,
     contactPhone,
+    pickupLocation,
+    dropoffLocation,
     setTravelers,
     setContact,
+    setLocations,
   } = useCheckoutStore();
 
   const [names, setNames] = useState<string[]>(
     Array.from({ length: count }).map((_, i) => travelers[i]?.name ?? (i === 0 ? user?.name ?? "" : "")),
   );
+  const [name, setName] = useState(contactName || user?.name || "");
   const [email, setEmail] = useState(contactEmail || user?.email || "");
   const [phone, setPhone] = useState(contactPhone || user?.phone || "");
+  const [pickup, setPickup] = useState(pickupLocation || "");
+  const [dropoff, setDropoff] = useState(dropoffLocation || "");
+  const [sameAsPickup, setSameAsPickup] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function onPickupChange(v: string) {
+    setPickup(v);
+    if (sameAsPickup) setDropoff(v);
+  }
+
+  function toggleSameAsPickup() {
+    setSameAsPickup((prev) => {
+      const next = !prev;
+      if (next) setDropoff(pickup);
+      return next;
+    });
+  }
+
   function onContinue() {
+    if (!name.trim()) {
+      return setError("Please enter the lead traveller's name.");
+    }
     if (names.some((n) => !n.trim())) {
       return setError("Please fill in every traveller's name.");
     }
@@ -40,13 +65,21 @@ export default function TravelersScreen() {
     if (phone && !isValidPhone(phone)) {
       return setError("Please enter a valid phone number.");
     }
+    if (!pickup.trim()) {
+      return setError("Please enter a pickup location.");
+    }
+    const finalDropoff = sameAsPickup ? pickup : dropoff;
+    if (!finalDropoff.trim()) {
+      return setError("Please enter a drop-off location.");
+    }
     setError(null);
     const updated = names.map((n, i) => ({
       id: `tr_${Date.now()}_${i}`,
       name: n.trim(),
     }));
     setTravelers(updated);
-    setContact(email, phone);
+    setContact({ name: name.trim(), email: email.trim(), phone: phone.trim() });
+    setLocations(pickup.trim(), finalDropoff.trim());
     router.push("/checkout/payment");
   }
 
@@ -62,7 +95,11 @@ export default function TravelersScreen() {
         <Text className="text-xs text-ink-400">{count} pax</Text>
       </View>
 
-      <View className="px-5 gap-5 pb-8">
+      <ScrollView
+        contentContainerClassName="px-5 py-5 gap-5 pb-10"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View className="gap-3">
           <Text className="text-sm font-semibold text-ink-900">
             Traveller{count > 1 ? "s" : ""}
@@ -81,7 +118,22 @@ export default function TravelersScreen() {
         </View>
 
         <View className="gap-3">
-          <Text className="text-sm font-semibold text-ink-900">Contact details</Text>
+          <Text className="text-sm font-semibold text-ink-900">
+            Lead traveller & contact
+          </Text>
+          <Input
+            label="Customer name"
+            placeholder="Full name"
+            value={name}
+            onChangeText={setName}
+          />
+          <Input
+            label="Mobile number"
+            placeholder="+1 555 010 0000"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+          />
           <Input
             label="Email"
             placeholder="you@example.com"
@@ -90,13 +142,44 @@ export default function TravelersScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
           />
+        </View>
+
+        <View className="gap-3">
+          <Text className="text-sm font-semibold text-ink-900">
+            Pickup & drop-off
+          </Text>
           <Input
-            label="Phone (for supplier contact)"
-            placeholder="+1 555 010 0000"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
+            label="Pickup location"
+            placeholder="e.g. Naran Main Bazaar"
+            value={pickup}
+            onChangeText={onPickupChange}
           />
+          <Input
+            label="Drop-off location"
+            placeholder="e.g. Naran Main Bazaar"
+            value={sameAsPickup ? pickup : dropoff}
+            onChangeText={setDropoff}
+            editable={!sameAsPickup}
+            hint={sameAsPickup ? "Auto-filled from pickup location." : undefined}
+          />
+          <Pressable
+            onPress={toggleSameAsPickup}
+            className="flex-row items-center gap-2 py-1"
+          >
+            <View
+              className={cn(
+                "h-5 w-5 rounded-md border items-center justify-center",
+                sameAsPickup
+                  ? "bg-brand-600 border-brand-600"
+                  : "border-ink-300 bg-white",
+              )}
+            >
+              {sameAsPickup ? (
+                <Ionicons name="checkmark" size={14} color="#ffffff" />
+              ) : null}
+            </View>
+            <Text className="text-sm text-ink-700">Same as pickup location</Text>
+          </Pressable>
         </View>
 
         {error ? (
@@ -106,7 +189,7 @@ export default function TravelersScreen() {
         ) : null}
 
         <Button title="Continue to payment" size="lg" block onPress={onContinue} />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

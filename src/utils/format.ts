@@ -41,6 +41,18 @@ export function formatRelativeDay(iso: string): string {
   return formatDate(iso);
 }
 
+/** Formats an ISO date string as "Wed, 12 Aug 2026". */
+export function formatLongDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
