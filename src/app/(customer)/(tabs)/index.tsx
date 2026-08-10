@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { FlatList, Pressable, Text, View } from "react-native";
 
@@ -6,18 +7,32 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ColdStartBanner } from "@/components/ui/ColdStartBanner";
 import { ListingCard } from "@/components/ListingCard";
 import { CATEGORIES } from "@/constants/categories";
 import { useHomeFeed } from "@/features/home/useHomeFeed";
 import { useSession } from "@/auth/sessionStore";
+import { isTimeoutError } from "@/api/client";
 import { cn } from "@/utils/cn";
 import { APP_NAME } from "@/config";
 import type { Listing } from "@/types";
 
+/** Loads slower than this are treated as a backend cold start. */
+const COLD_START_THRESHOLD_MS = 1500;
+
 export default function CustomerHomeScreen() {
   const router = useRouter();
   const { user } = useSession();
-  const { data, isLoading, isError, refetch } = useHomeFeed();
+  const { data, isLoading, isError, error, isFetching, refetch } = useHomeFeed();
+  const [coldStart, setColdStart] = useState(false);
+
+  useEffect(() => {
+    if (!isFetching) return;
+    const timer = setTimeout(() => setColdStart(true), COLD_START_THRESHOLD_MS);
+    return () => clearTimeout(timer);
+  }, [isFetching]);
+
+  const timedOut = isError && isTimeoutError(error);
 
   return (
     <Screen
@@ -47,6 +62,13 @@ export default function CustomerHomeScreen() {
 
         <SearchBar interactive onFocus={() => router.push("/search")} />
       </View>
+
+      {coldStart ? (
+        <ColdStartBanner
+          onDismiss={() => setColdStart(false)}
+          onRetry={timedOut ? () => refetch() : undefined}
+        />
+      ) : null}
 
       {/* Categories */}
       <FlatList

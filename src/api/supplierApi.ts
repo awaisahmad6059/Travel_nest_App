@@ -1,4 +1,4 @@
-import { USE_MOCKS } from "@/config";
+import { USE_MOCKS_SUPPLIER } from "@/config";
 import { request, mockDelay } from "./client";
 import { MOCK_SUPPLIER_BOOKINGS } from "@/mocks/bookings";
 import { MOCK_DASHBOARD_STATS, MOCK_PAYOUTS } from "@/mocks/dashboard";
@@ -35,7 +35,7 @@ export const supplierApi = {
     supplier: Supplier;
     recentBookings: Booking[];
   }> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_SUPPLIER) {
       const supplier = MOCK_SUPPLIERS.find((s) => s.id === supplierId) ?? MOCK_SUPPLIERS[0];
       return mockDelay({
         stats: MOCK_DASHBOARD_STATS,
@@ -48,7 +48,7 @@ export const supplierApi = {
   },
 
   async getBookingInbox(supplierId: string): Promise<Booking[]> {
-    if (USE_MOCKS) return mockDelay(mockSupplierBookingStore);
+    if (USE_MOCKS_SUPPLIER) return mockDelay(mockSupplierBookingStore);
     const dtos = await request<BookingDTO[]>(
       `/bookings/supplier/list?supplier_id=${encodeURIComponent(supplierId)}`,
     );
@@ -56,7 +56,7 @@ export const supplierApi = {
   },
 
   async getPayouts(supplierId: string): Promise<PayoutSummary> {
-    if (USE_MOCKS) return mockDelay(MOCK_PAYOUTS);
+    if (USE_MOCKS_SUPPLIER) return mockDelay(MOCK_PAYOUTS);
     const [ledger, history] = await Promise.all([
       request<PayoutLedgerDTO>(`/payouts/ledger/${encodeURIComponent(supplierId)}`),
       request<PayoutHistoryItemDTO[]>(`/payouts/history/${encodeURIComponent(supplierId)}`),
@@ -65,7 +65,7 @@ export const supplierApi = {
   },
 
   async confirmBooking(id: string): Promise<Booking> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_SUPPLIER) {
       const booking = mockSupplierBookingStore.find((b) => b.id === id);
       if (!booking) throw new Error("Booking not found");
       const updated = { ...booking, status: "confirmed" as const };
@@ -80,7 +80,7 @@ export const supplierApi = {
   },
 
   async rejectBooking(id: string, reason: string): Promise<Booking> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_SUPPLIER) {
       const booking = mockSupplierBookingStore.find((b) => b.id === id);
       if (!booking) throw new Error("Booking not found");
       const updated = { ...booking, status: "cancelled" as const };

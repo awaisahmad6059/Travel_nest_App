@@ -1,4 +1,4 @@
-import { USE_MOCKS } from "@/config";
+import { USE_MOCKS_PUSH } from "@/config";
 import { request, mockDelay } from "./client";
 
 /**
@@ -8,7 +8,7 @@ import { request, mockDelay } from "./client";
  */
 export const pushApi = {
   async registerDevice(_token: string, platform: "ios" | "android"): Promise<void> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_PUSH) {
       console.log(`[push:mock] registered ${platform} device ${_token.slice(0, 12)}…`);
       return mockDelay(undefined, 200);
     }

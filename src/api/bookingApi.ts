@@ -1,4 +1,4 @@
-import { USE_MOCKS } from "@/config";
+import { USE_MOCKS_BOOKINGS } from "@/config";
 import { request, mockDelay } from "./client";
 import { MOCK_BOOKINGS } from "@/mocks/bookings";
 import {
@@ -94,7 +94,7 @@ function cachedVoucherToBooking(v: CachedVoucher): Booking {
 
 export const bookingApi = {
   async getMyBookings(): Promise<Booking[]> {
-    if (USE_MOCKS) return mockDelay(mockBookingStore);
+    if (USE_MOCKS_BOOKINGS) return mockDelay(mockBookingStore);
     // Backend list endpoint (§5.2) is not built yet — the offline voucher
     // cache is the source of truth for bookings created from this app.
     const vouchers = await voucherCache.loadVouchers();
@@ -102,7 +102,7 @@ export const bookingApi = {
   },
 
   async getBooking(idOrRef: string): Promise<Booking | null> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_BOOKINGS) {
       const booking = mockBookingStore.find((b) => b.id === idOrRef);
       return mockDelay(booking ?? null, 300);
     }
@@ -124,7 +124,7 @@ export const bookingApi = {
   },
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_BOOKINGS) {
       const created: Booking = {
         id: `bk_${Date.now()}`,
         bookingRef: `TN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
@@ -169,7 +169,7 @@ export const bookingApi = {
   },
 
   async cancelBooking(id: string, reason?: string): Promise<Booking> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_BOOKINGS) {
       const booking = mockBookingStore.find((b) => b.id === id);
       if (!booking) throw new Error("Booking not found");
       const updated = { ...booking, status: "cancelled" as const };

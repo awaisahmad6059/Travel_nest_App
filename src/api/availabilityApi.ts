@@ -1,4 +1,4 @@
-import { USE_MOCKS } from "@/config";
+import { USE_MOCKS_AVAILABILITY } from "@/config";
 import { request, mockDelay } from "./client";
 import {
   Hold,
@@ -17,7 +17,7 @@ import {
  */
 export const availabilityApi = {
   async getSlots(listingId: string): Promise<Slot[]> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AVAILABILITY) {
       return mockDelay([], 250);
     }
     const dtos = await request<SlotDTO[]>(
@@ -27,7 +27,7 @@ export const availabilityApi = {
   },
 
   async hold(req: HoldRequest): Promise<Hold> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AVAILABILITY) {
       return mockDelay(
         {
           holdId: `hold_mock_${Date.now()}`,

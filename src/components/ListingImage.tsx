@@ -20,7 +20,12 @@ export function ListingImage({
   if (url) {
     return (
       <View className={cn("overflow-hidden", className)}>
-        <Image source={{ uri: url }} className="w-full h-full" contentFit="cover" />
+        <Image
+          source={{ uri: url }}
+          className="w-full h-full"
+          style={{ width: "100%", height: "100%" }}
+          contentFit="cover"
+        />
       </View>
     );
   }

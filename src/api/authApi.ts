@@ -1,4 +1,4 @@
-import { USE_MOCKS } from "@/config";
+import { USE_MOCKS_AUTH } from "@/config";
 import { request, mockDelay } from "./client";
 import { DEMO_ACCOUNTS } from "@/mocks/users";
 import { userDtoToUser, UserDTO } from "./contracts";
@@ -39,7 +39,7 @@ function toSession(dto: AuthResponseDTO, fallbackRole: "customer" | "supplier"):
 
 export const authApi = {
   async signIn(input: SignInInput): Promise<AuthSession> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AUTH) {
       const user = DEMO_ACCOUNTS.find(
         (u) => u.email.toLowerCase() === input.email.trim().toLowerCase(),
       );
@@ -62,7 +62,7 @@ export const authApi = {
   },
 
   async signUp(input: SignUpInput): Promise<AuthSession> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AUTH) {
       return mockDelay({
         accessToken: `mock-access-new-${Date.now()}`,
         refreshToken: `mock-refresh-new`,
@@ -103,7 +103,7 @@ export const authApi = {
   },
 
   async signOut(): Promise<void> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AUTH) {
       return mockDelay(undefined, 200);
     }
     // No logout route in the handoff — tokens are dropped client-side.
@@ -111,7 +111,7 @@ export const authApi = {
   },
 
   async requestPasswordReset(email: string): Promise<void> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AUTH) {
       return mockDelay(undefined, 600);
     }
     await request("/auth/forgot-password", {

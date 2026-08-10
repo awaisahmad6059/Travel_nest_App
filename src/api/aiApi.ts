@@ -1,4 +1,4 @@
-import { USE_MOCKS } from "@/config";
+import { USE_MOCKS_AI } from "@/config";
 import { request, mockDelay } from "./client";
 import {
   ChatResponse,
@@ -14,7 +14,7 @@ import type { ReviewSummary } from "@/types";
 export const aiApi = {
   /** Help / concierge chat. */
   async chat(message: string, locale = "en"): Promise<{ response: string; confidence?: number }> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AI) {
       const canned =
         "You can cancel up to 24 hours before the activity for a full refund. Need anything else?";
       return mockDelay({ response: canned, confidence: 0.98 }, 700);
@@ -28,7 +28,7 @@ export const aiApi = {
 
   /** AI pros/cons summary for a listing detail page. */
   async reviewSummary(listingId: string): Promise<ReviewSummary> {
-    if (USE_MOCKS) {
+    if (USE_MOCKS_AI) {
       return mockDelay({ pros: [], cons: [] }, 400);
     }
     const dto = await request<ReviewSummaryDTO>(

@@ -64,20 +64,28 @@ export interface ListingDTO {
   confirmation_type?: string;
   cancellation_policy?: string;
   cached_rating_avg?: number | null;
+  cached_review_count?: number;
   images: ListingImageDTO[];
   options: ListingOptionDTO[];
   meeting_point?: MeetingPointDTO | null;
   available_slots?: SlotDTO[];
   category?: string;
+  category_id?: string;
+  category_name?: string;
   destination?: string;
+  destination_id?: string;
   city?: string;
   country?: string;
   duration?: string;
+  duration_minutes?: number;
+  summary?: string;
   short_description?: string;
   description?: string;
   highlights?: string[];
   includes?: string[];
   excludes?: string[];
+  inclusions?: string[];
+  exclusions?: string[];
   itinerary?: ListingItineraryDTO[];
   review_count?: number;
   free_cancellation?: boolean;
@@ -85,8 +93,10 @@ export interface ListingDTO {
   tags?: string[];
   is_trending?: boolean;
   is_deal?: boolean;
+  merchandising_badges?: string[];
   recommended_for?: string[];
   supplier_id?: string;
+  ai_review_summary?: ReviewSummaryDTO | null;
 }
 
 export interface CategoryDTO {
@@ -269,9 +279,51 @@ const CATEGORY_TONE: Record<CategoryId, ImageTone> = {
   transport: "slate",
 };
 
-function toCategoryId(value?: string): CategoryId {
-  if (value && value in CATEGORY_TONE) return value as CategoryId;
+/** Backend category ids (cat-*) → app CategoryId. Unknown ids fall through to name matching. */
+const CATEGORY_BY_ID: Record<string, CategoryId> = {
+  "cat-tickets": "attractions",
+  "cat-things-to-do": "attractions",
+  "cat-tours": "tours",
+  "cat-transfers": "transport",
+  "cat-rentals": "transport",
+  "cat-food": "food",
+  "cat-adventure": "activities",
+  "cat-cruises": "activities",
+  "cat-events": "activities",
+  "cat-packages": "experiences",
+};
+
+function toCategoryId(categoryId?: string, categoryName?: string): CategoryId {
+  if (categoryId && categoryId in CATEGORY_BY_ID) {
+    return CATEGORY_BY_ID[categoryId];
+  }
+  const label = (categoryName ?? "").toLowerCase();
+  if (/ticket|museum|attraction|monument|sight/.test(label)) return "attractions";
+  if (/tour|walk|heritage|safari|trip|day trip/.test(label)) return "tours";
+  if (/food|dining|drink|culinary|street food/.test(label)) return "food";
+  if (/transport|transfer|rental|transit/.test(label)) return "transport";
+  if (/adventure|cruise|outdoor|sport|water|activity/.test(label)) return "activities";
+  if (/package|multi-day|bundle/.test(label)) return "experiences";
   return "experiences";
+}
+
+function formatDuration(minutes?: number): string {
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return "";
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+/** "dest-bali" → "Bali", "new-york" → "New York" — display fallback when no city/country is sent. */
+function prettifySlug(value?: string): string {
+  if (!value) return "";
+  return value
+    .replace(/^dest-/, "")
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 export function mapPrice(amount: number, currency?: string): Price {
@@ -286,14 +338,15 @@ export function mapPrice(amount: number, currency?: string): Price {
 }
 
 export function listingDtoToListing(dto: ListingDTO): Listing {
-  const category = toCategoryId(dto.category);
+  const category = toCategoryId(dto.category_id ?? dto.category, dto.category_name);
   const currency = dto.currency ?? "USD";
   return {
     id: dto.id,
     slug: dto.slug,
     title: dto.title,
     category,
-    destination: dto.destination ?? dto.city ?? dto.country ?? "",
+    destination:
+      dto.destination ?? dto.city ?? dto.country ?? prettifySlug(dto.destination_id),
     city: dto.city ?? "",
     country: dto.country ?? "",
     images: (dto.images ?? []).map((img) => ({
@@ -307,14 +360,14 @@ export function listingDtoToListing(dto: ListingDTO): Listing {
       tone: CATEGORY_TONE[category],
     },
     rating: dto.cached_rating_avg ?? 0,
-    reviewCount: dto.review_count ?? 0,
+    reviewCount: dto.cached_review_count ?? dto.review_count ?? 0,
     price: mapPrice(dto.base_price ?? 0, currency),
-    duration: dto.duration ?? "",
-    shortDescription: dto.short_description ?? dto.title,
-    description: dto.description ?? dto.short_description ?? "",
+    duration: dto.duration ?? formatDuration(dto.duration_minutes),
+    shortDescription: dto.summary ?? dto.short_description ?? dto.title,
+    description: dto.description ?? dto.summary ?? dto.short_description ?? "",
     highlights: dto.highlights ?? [],
-    includes: dto.includes ?? [],
-    excludes: dto.excludes ?? [],
+    includes: dto.inclusions ?? dto.includes ?? [],
+    excludes: dto.exclusions ?? dto.excludes ?? [],
     itinerary: (dto.itinerary ?? []).map((s) => ({
       time: s.time,
       title: s.title,
@@ -338,9 +391,13 @@ export function listingDtoToListing(dto: ListingDTO): Listing {
       dto.instant_confirmation ?? dto.confirmation_type === "INSTANT",
     supplierId: dto.supplier_id ?? "",
     tags: dto.tags ?? [],
-    isTrending: dto.is_trending ?? false,
+    isTrending:
+      dto.is_trending ?? (dto.merchandising_badges ?? []).includes("Bestseller"),
     isDeal: dto.is_deal ?? false,
     recommendedFor: dto.recommended_for ?? [],
+    reviewSummary: dto.ai_review_summary
+      ? { pros: dto.ai_review_summary.pros ?? [], cons: dto.ai_review_summary.cons ?? [] }
+      : undefined,
   };
 }
 

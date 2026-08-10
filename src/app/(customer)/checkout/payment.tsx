@@ -166,7 +166,8 @@ export default function PaymentScreen() {
 
       clear();
       reset();
-      router.replace(
+      router.dismissAll();
+      router.push(
         `/checkout/confirmation?bookingIds=${created.map((b) => b.id).join(",")}`,
       );
     } catch (e) {
