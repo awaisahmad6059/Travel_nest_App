@@ -4,24 +4,94 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
+import { availabilityApi } from "@/api/availabilityApi";
 import { paymentApi } from "@/api/paymentApi";
 import { useCreateBooking } from "@/features/booking/useBookings";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useCart } from "@/store/cartStore";
-import { useCheckoutStore } from "@/store/checkoutStore";
+import { lineKey, useCheckoutStore } from "@/store/checkoutStore";
 import { cn } from "@/utils/cn";
+import { mapPrice } from "@/api/contracts";
+import type { Booking } from "@/types";
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function PaymentScreen() {
   const router = useRouter();
   const { lines, coupon, clear, subtotal } = useCart();
-  const { travelers, contactEmail, contactPhone } = useCheckoutStore();
+  const { travelers, contactEmail, contactPhone, holds, setHold, reset } =
+    useCheckoutStore();
   const createBooking = useCreateBooking();
 
   const [methods, setMethods] = useState<{ id: string; label: string; detail: string }[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Inventory hold state (API_HANDOFF.md §4.2 / §4.4).
+  const [holding, setHolding] = useState(false);
+  const [holdError, setHoldError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const needsHold = lines.filter((l) => l.slotId);
+  const earliestExpiry = (() => {
+    const times = needsHold
+      .map((l) => holds[lineKey(l.listingId, l.optionId)]?.expiresAt)
+      .filter((t): t is number => typeof t === "number");
+    return times.length ? Math.min(...times) : null;
+  })();
+  const holdsComplete = needsHold.every(
+    (l) => holds[lineKey(l.listingId, l.optionId)] != null,
+  );
+  const holdExpired = earliestExpiry != null && earliestExpiry <= now;
+
+  async function placeHolds() {
+    if (needsHold.length === 0) return;
+    setHolding(true);
+    setHoldError(null);
+    try {
+      for (const line of needsHold) {
+        const key = lineKey(line.listingId, line.optionId);
+        const existing = holds[key];
+        if (existing && existing.expiresAt > Date.now()) continue;
+        const hold = await availabilityApi.hold({
+          slot_id: line.slotId as string,
+          option_id: line.optionId,
+          quantity: line.quantity,
+        });
+        setHold(key, hold);
+      }
+    } catch (e) {
+      setHoldError(
+        e instanceof Error
+          ? e.message
+          : "Couldn't reserve this experience. Please try again.",
+      );
+    } finally {
+      setHolding(false);
+    }
+  }
+
+  // Place holds once the screen opens, then tick a countdown while active.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void placeHolds();
+    }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!earliestExpiry) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [earliestExpiry]);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +114,12 @@ export default function PaymentScreen() {
 
   async function pay() {
     if (!selected) return;
+    if (needsHold.length > 0 && (holdExpired || !holdsComplete)) {
+      setError(
+        "Your inventory hold has expired. Tap re-hold to reserve the slot again before paying.",
+      );
+      return;
+    }
     setPaying(true);
     setError(null);
     try {
@@ -58,30 +134,48 @@ export default function PaymentScreen() {
         setPaying(false);
         return;
       }
+      const paymentToken = result.transactionId;
 
-      const booking = await createBooking.mutateAsync({
-        items: lines.map((l) => ({
-          listingId: l.listingId,
-          listingSlug: l.listingTitle,
-          title: l.listingTitle,
-          thumbnailKey: l.thumbnailKey,
-          optionName: l.optionName,
-          date: l.date,
-          quantity: l.quantity,
-          unitPrice: { amount: l.unitPrice, currency: "USD", display: `$${l.unitPrice.toFixed(2)}` },
-          total: { amount: l.unitPrice * l.quantity, currency: "USD", display: `$${(l.unitPrice * l.quantity).toFixed(2)}` },
-        })),
-        travelers,
-        total: { amount: total, currency: "USD", display: `$${total.toFixed(2)}` },
-      });
+      // One booking per cart line, each backed by its own inventory hold.
+      const created: Booking[] = [];
+      for (const line of lines) {
+        const hold = line.slotId ? holds[lineKey(line.listingId, line.optionId)] : undefined;
+        const unitPrice = mapPrice(line.unitPrice, line.currency);
+        const lineTotal = mapPrice(line.unitPrice * line.quantity, line.currency);
+        const booking = await createBooking.mutateAsync({
+          items: [
+            {
+              listingId: line.listingId,
+              listingSlug: line.listingTitle,
+              title: line.listingTitle,
+              thumbnailKey: line.thumbnailKey,
+              optionName: line.optionName,
+              date: line.date,
+              quantity: line.quantity,
+              unitPrice,
+              total: lineTotal,
+            },
+          ],
+          travelers,
+          total: lineTotal,
+          holdId: hold?.holdId,
+          paymentToken,
+        });
+        created.push(booking);
+      }
 
       clear();
-      router.replace(`/checkout/confirmation?bookingId=${booking.id}`);
+      reset();
+      router.replace(
+        `/checkout/confirmation?bookingIds=${created.map((b) => b.id).join(",")}`,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Payment failed. Please try again.");
       setPaying(false);
     }
   }
+
+  const needsRehold = needsHold.length > 0 && holdExpired;
 
   return (
     <SafeAreaView className="flex-1 bg-surface-100">
@@ -94,6 +188,69 @@ export default function PaymentScreen() {
       </View>
 
       <View className="px-5 gap-5 pb-8">
+        {/* Inventory hold status */}
+        {needsHold.length > 0 ? (
+          <View
+            className={cn(
+              "rounded-2xl border px-4 py-3",
+              holdError
+                ? "border-danger-200 bg-danger-50"
+                : needsRehold
+                  ? "border-amber-200 bg-amber-50"
+                  : holdsComplete
+                    ? "border-success-200 bg-success-50"
+                    : "border-ink-200 bg-white",
+            )}
+          >
+            {holding ? (
+              <View className="flex-row items-center gap-2">
+                <Text className="text-sm text-ink-600">Reserving your slot…</Text>
+              </View>
+            ) : holdError ? (
+              <View className="gap-2">
+                <Text className="text-sm font-semibold text-danger-600">
+                  {"Couldn't reserve your slot"}
+                </Text>
+                <Text className="text-xs text-danger-600">{holdError}</Text>
+                <Button
+                  title="Try again"
+                  variant="secondary"
+                  size="sm"
+                  loading={holding}
+                  onPress={() => void placeHolds()}
+                />
+              </View>
+            ) : needsRehold ? (
+              <View className="flex-row items-center justify-between gap-2">
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-amber-900">
+                    Inventory hold expired
+                  </Text>
+                  <Text className="text-xs text-amber-800">
+                    Re-hold the slot to continue booking.
+                  </Text>
+                </View>
+                <Button
+                  title="Re-hold"
+                  variant="secondary"
+                  size="sm"
+                  loading={holding}
+                  onPress={() => void placeHolds()}
+                />
+              </View>
+            ) : (
+              <View className="flex-row items-center gap-2">
+                <Text className="text-sm font-semibold text-success-600">
+                  Inventory held ✓
+                </Text>
+                <Text className="text-sm text-ink-500">
+                  expires in {formatCountdown((earliestExpiry ?? now) - now)}
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : null}
+
         <View>
           <Text className="text-sm font-semibold text-ink-900 mb-3">Pay with</Text>
           {methods === null ? (
@@ -163,8 +320,8 @@ export default function PaymentScreen() {
           title={`Pay $${total.toFixed(2)}`}
           size="lg"
           block
-          loading={paying}
-          disabled={!selected}
+          loading={paying || holding}
+          disabled={!selected || needsRehold}
           onPress={pay}
         />
 

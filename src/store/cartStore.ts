@@ -10,7 +10,10 @@ export interface CartLine {
   unitPrice: number;
   currency: string;
   quantity: number;
+  /** ISO date of the activity (slot start_time when a real slot was picked). */
   date: string;
+  /** Inventory slot id (API_HANDOFF.md §4.2) — required by the real backend hold. */
+  slotId?: string;
   freeCancellation: boolean;
   instantConfirmation: boolean;
 }

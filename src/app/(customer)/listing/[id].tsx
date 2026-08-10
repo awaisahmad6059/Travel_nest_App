@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -15,9 +15,10 @@ import { ReviewSummaryPanel } from "@/components/ReviewSummaryPanel";
 import { AppMap } from "@/components/AppMap";
 import { useListing, useRelatedListings } from "@/features/listing/useListing";
 import { useListingReviews } from "@/features/supplier/useSupplier";
+import { useSlots } from "@/features/booking/useBookings";
 import { useCart } from "@/store/cartStore";
 import { useWishlist } from "@/store/wishlistStore";
-import { formatDate, formatLongDate, formatPrice } from "@/utils/format";
+import { formatDate, formatLongDate } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import type { Listing } from "@/types";
 
@@ -26,6 +27,17 @@ function nextDays(count = 10) {
     const d = new Date();
     d.setDate(d.getDate() + i + 1);
     return d.toISOString();
+  });
+}
+
+/** Formats a slot ISO datetime as "HH:mm". */
+function slotTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -130,7 +142,7 @@ export default function ListingDetailScreen() {
 
         {/* Includes / Excludes */}
         <View className="px-5 mt-6">
-          <Text className="text-lg font-bold text-ink-900 mb-3">What's included</Text>
+          <Text className="text-lg font-bold text-ink-900 mb-3">{"What's included"}</Text>
           <View className="gap-2">
             {listing.includes.map((item, i) => (
               <View key={i} className="flex-row gap-2.5">
@@ -273,17 +285,46 @@ function BookingSheet({
 }) {
   const router = useRouter();
   const { addLine } = useCart();
+  const { data: slotsData } = useSlots(listing.id);
+  const slots = slotsData ?? [];
+  const hasRealSlots = slots.length > 0;
+
   const [quickDates, setQuickDates] = useState(nextDays);
   const [date, setDate] = useState(quickDates[0]);
+  const [slotId, setSlotId] = useState<string | undefined>(undefined);
   const [optionId, setOptionId] = useState(listing.options[0]?.id ?? "");
   const [qty, setQty] = useState(1);
   const [showCalendar, setShowCalendar] = useState(false);
   const dateScrollRef = useRef<ScrollView>(null);
 
+  const selectedSlot = hasRealSlots
+    ? slots.find((s) => s.id === slotId) ?? slots[0]
+    : undefined;
+  // Default to the first real slot when none is picked yet.
+  const effectiveSlotId = selectedSlot?.id;
+  const effectiveDate =
+    hasRealSlots && selectedSlot ? selectedSlot.startTime : date;
+
   const option = listing.options.find((o) => o.id === optionId) ?? listing.options[0];
   const total = (option?.price.amount ?? listing.price.amount) * qty;
 
   function handleCalendarSelect(iso: string) {
+    if (hasRealSlots) {
+      const day = iso.slice(0, 10);
+      const slot = slots.find((s) => s.startTime.slice(0, 10) === day);
+      if (!slot) {
+        Alert.alert(
+          "No availability",
+          "There are no open slots on this date. Pick a date with availability instead.",
+        );
+        setShowCalendar(false);
+        return;
+      }
+      setSlotId(slot.id);
+      setDate(slot.startTime);
+      setShowCalendar(false);
+      return;
+    }
     setDate(iso);
     setQuickDates((prev) =>
       prev.includes(iso) ? prev : [...prev, iso].slice(-40),
@@ -306,7 +347,8 @@ function BookingSheet({
       unitPrice: option.price.amount,
       currency: option.price.currency,
       quantity: qty,
-      date,
+      date: effectiveDate,
+      slotId: effectiveSlotId,
       freeCancellation: listing.freeCancellation,
       instantConfirmation: listing.instantConfirmation,
     });
@@ -349,7 +391,7 @@ function BookingSheet({
         </Pressable>
       </View>
       <Text className="text-xs text-ink-500 mb-2">
-        Selected: {formatLongDate(date)}
+        Selected: {formatLongDate(effectiveDate)}
       </Text>
       <ScrollView
         horizontal
@@ -358,49 +400,117 @@ function BookingSheet({
         className="mb-4"
       >
         <View className="flex-row gap-2 pr-4">
-          {quickDates.map((d) => {
-            const day = formatDate(d).split(" ")[0];
-            const month = formatDate(d).split(" ")[1];
-            const selected = date === d;
-            return (
-              <Pressable
-                key={d}
-                onPress={() => setDate(d)}
-                className={cn(
-                  "w-16 items-center rounded-2xl border py-3",
-                  selected ? "border-brand-600 bg-brand-600" : "border-ink-200 bg-white",
-                )}
-              >
-                <Text
-                  className={cn(
-                    "text-xl font-bold",
-                    selected ? "text-white" : "text-ink-900",
-                  )}
-                >
-                  {day}
-                </Text>
-                <Text
-                  className={cn(
-                    "text-xs",
-                    selected ? "text-brand-100" : "text-ink-400",
-                  )}
-                >
-                  {month}
-                </Text>
-                {selected ? (
-                  <View className="mt-1">
-                    <Text className="text-brand-100 text-xs">✓</Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
+          {hasRealSlots
+            ? slots.map((slot) => {
+                const start = new Date(slot.startTime);
+                const day = start.getDate().toString();
+                const month = start.toLocaleDateString("en-GB", { month: "short" });
+                const time = slotTime(slot.startTime);
+                const selected = slot.id === selectedSlot?.id;
+                const soldOut = slot.remaining <= 0;
+                return (
+                  <Pressable
+                    key={slot.id}
+                    disabled={soldOut}
+                    onPress={() => {
+                      setSlotId(slot.id);
+                      setDate(slot.startTime);
+                    }}
+                    className={cn(
+                      "w-[72px] items-center rounded-2xl border py-2.5",
+                      selected
+                        ? "border-brand-600 bg-brand-600"
+                        : soldOut
+                          ? "border-ink-100 bg-ink-50"
+                          : "border-ink-200 bg-white",
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        "text-xl font-bold",
+                        selected ? "text-white" : soldOut ? "text-ink-300" : "text-ink-900",
+                      )}
+                    >
+                      {day}
+                    </Text>
+                    <Text
+                      className={cn(
+                        "text-xs",
+                        selected ? "text-brand-100" : soldOut ? "text-ink-300" : "text-ink-400",
+                      )}
+                    >
+                      {month}
+                    </Text>
+                    <Text
+                      className={cn(
+                        "mt-1 text-[11px] font-semibold",
+                        selected ? "text-white" : soldOut ? "text-ink-300" : "text-ink-700",
+                      )}
+                    >
+                      {time}
+                    </Text>
+                    <Text
+                      className={cn(
+                        "mt-0.5 text-[10px]",
+                        selected
+                          ? "text-brand-100"
+                          : soldOut
+                            ? "text-danger-500"
+                            : "text-success-600",
+                      )}
+                    >
+                      {soldOut
+                        ? "Sold out"
+                        : slot.remaining <= 5
+                          ? `Only ${slot.remaining} left`
+                          : `${slot.remaining} seats`}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            : quickDates.map((d) => {
+                const day = formatDate(d).split(" ")[0];
+                const month = formatDate(d).split(" ")[1];
+                const selected = date === d;
+                return (
+                  <Pressable
+                    key={d}
+                    onPress={() => setDate(d)}
+                    className={cn(
+                      "w-16 items-center rounded-2xl border py-3",
+                      selected ? "border-brand-600 bg-brand-600" : "border-ink-200 bg-white",
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        "text-xl font-bold",
+                        selected ? "text-white" : "text-ink-900",
+                      )}
+                    >
+                      {day}
+                    </Text>
+                    <Text
+                      className={cn(
+                        "text-xs",
+                        selected ? "text-brand-100" : "text-ink-400",
+                      )}
+                    >
+                      {month}
+                    </Text>
+                    {selected ? (
+                      <View className="mt-1">
+                        <Text className="text-brand-100 text-xs">✓</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
         </View>
       </ScrollView>
 
       {showCalendar ? (
         <CalendarPicker
-          selected={date}
+          selected={effectiveDate}
           onSelect={handleCalendarSelect}
         />
       ) : null}

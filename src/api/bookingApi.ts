@@ -5,8 +5,11 @@ import {
   BookingDTO,
   bookingDtoToBooking,
   CheckoutRequest,
+  mapBookingStatus,
+  mapPrice,
 } from "./contracts";
-import type { Booking, CreateBookingInput } from "@/types";
+import { CachedVoucher, voucherCache } from "@/features/booking/voucherCache";
+import type { Booking, BookingStatus, CreateBookingInput, Price } from "@/types";
 
 /**
  * Bookings service (API_HANDOFF.md §4.3) — My Bookings (customer) and the
@@ -15,20 +18,87 @@ import type { Booking, CreateBookingInput } from "@/types";
  * Checkout uses the documented request shape:
  *   POST /bookings  { hold_id, lead_name, lead_email, lead_phone,
  *                     special_requirements, payment_token }
- * The booking response carries `qr_voucher_code` which must be cached offline
- * so My Bookings works without a connection.
+ * The booking response carries `qr_voucher_code` which is cached offline
+ * (voucherCache) so My Bookings works without a connection and the voucher
+ * QR stays viewable offline (SRS requirement).
  *
  * In mock mode bookings live in an in-memory store seeded from MOCK_BOOKINGS,
  * so bookings created during the session are also retrievable by id.
  */
 const mockBookingStore: Booking[] = [...MOCK_BOOKINGS];
 
+function bookingDtoToCachedVoucher(dto: BookingDTO): CachedVoucher {
+  const travelers = dto.traveler_details?.lead_name
+    ? [
+        {
+          id: "lead",
+          name: dto.traveler_details.lead_name,
+          email: dto.traveler_details.lead_email,
+          phone: dto.traveler_details.lead_phone,
+        },
+      ]
+    : [];
+  return {
+    bookingId: dto.id,
+    bookingRef: dto.booking_reference,
+    qrVoucherCode: dto.qr_voucher_code,
+    listingId: dto.listing_id,
+    listingSlug: dto.listing_slug,
+    listingTitle: dto.listing_title ?? dto.listing_id,
+    thumbnailKey: dto.thumbnail_key,
+    optionId: dto.option_id,
+    optionName: dto.option_name,
+    slotId: dto.slot_id,
+    activityDate: dto.slot_start_time,
+    createdAt: dto.created_at,
+    quantity: dto.total_travelers,
+    currency: dto.currency ?? "USD",
+    totalAmount: dto.gross_amount,
+    status: mapBookingStatus(dto.status),
+    travelers,
+    supplierId: dto.supplier_id,
+  };
+}
+
+function cachedVoucherToBooking(v: CachedVoucher): Booking {
+  const quantity = Math.max(1, v.quantity);
+  const total = mapPrice(v.totalAmount, v.currency) as Price;
+  const unitPrice = mapPrice(v.totalAmount / quantity, v.currency) as Price;
+  return {
+    id: v.bookingId,
+    bookingRef: v.bookingRef,
+    items: [
+      {
+        listingId: v.listingId,
+        listingSlug: v.listingSlug ?? "",
+        title: v.listingTitle,
+        thumbnailKey: v.thumbnailKey ?? "",
+        optionName: v.optionName,
+        date: v.activityDate,
+        quantity,
+        unitPrice,
+        total,
+      },
+    ],
+    status: v.status,
+    createdAt: v.createdAt,
+    activityDate: v.activityDate,
+    travelers: v.travelers,
+    total,
+    voucherCode: v.qrVoucherCode,
+    qrToken: v.qrVoucherCode,
+    supplierId: v.supplierId ?? "",
+    supplierName: v.supplierName,
+  };
+}
+
 export const bookingApi = {
   async getMyBookings(): Promise<Booking[]> {
     if (USE_MOCKS) return mockDelay(mockBookingStore);
-    // Planned: GET /bookings?status=UPCOMING|COMPLETED (§5.2)
-    const dtos = await request<BookingDTO[]>("/bookings");
-    return dtos.map(bookingDtoToBooking);
+    // Backend list endpoint (§5.2) is not built yet — the offline voucher
+    // cache is the source of truth for bookings created from this app.
+    const vouchers = await voucherCache.loadVouchers();
+    return vouchers.map(cachedVoucherToBooking);
   },
 
   async getBooking(idOrRef: string): Promise<Booking | null> {
@@ -36,11 +106,21 @@ export const bookingApi = {
       const booking = mockBookingStore.find((b) => b.id === idOrRef);
       return mockDelay(booking ?? null, 300);
     }
-    // GET /bookings/:ref accepts the booking_reference or the id.
-    const dto = await request<BookingDTO | null>(
-      `/bookings/${encodeURIComponent(idOrRef)}`,
-    );
-    return dto ? bookingDtoToBooking(dto) : null;
+    // GET /bookings/:ref accepts the booking_reference or the id. Falls back
+    // to the offline voucher cache when offline or when the backend list/ref
+    // is temporarily unavailable.
+    try {
+      const dto = await request<BookingDTO>(
+        `/bookings/${encodeURIComponent(idOrRef)}`,
+      );
+      return bookingDtoToBooking(dto);
+    } catch {
+      const vouchers = await voucherCache.loadVouchers();
+      const hit =
+        vouchers.find((v) => v.bookingId === idOrRef) ??
+        vouchers.find((v) => v.bookingRef === idOrRef);
+      return hit ? cachedVoucherToBooking(hit) : null;
+    }
   },
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -83,6 +163,8 @@ export const bookingApi = {
       method: "POST",
       body: JSON.stringify(body),
     });
+    // Offline voucher caching (API_HANDOFF.md §4.3 step 7).
+    await voucherCache.saveVoucher(bookingDtoToCachedVoucher(dto));
     return bookingDtoToBooking(dto);
   },
 
@@ -94,11 +176,16 @@ export const bookingApi = {
       mockBookingStore[mockBookingStore.indexOf(booking)] = updated;
       return mockDelay(updated);
     }
-    // Planned: POST /bookings/:id/cancel (§5.2)
-    const dto = await request<BookingDTO>(`/bookings/${encodeURIComponent(id)}/cancel`, {
-      method: "POST",
-      body: JSON.stringify({ reason }),
-    });
+    // Planned: POST /bookings/:id/cancel (§5.2) — backend-blocked for now.
+    const dto = await request<BookingDTO>(
+      `/bookings/${encodeURIComponent(id)}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      },
+    );
+    const updated: BookingStatus = mapBookingStatus(dto.status);
+    await voucherCache.updateVoucherStatus(id, updated);
     return bookingDtoToBooking(dto);
   },
 };
