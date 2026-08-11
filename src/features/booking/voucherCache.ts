@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store";
-import type { BookingStatus, Traveler } from "@/types";
+import type { BookingStatus, Thumbnail, Traveler } from "@/types";
 
 /**
  * Offline voucher cache (API_HANDOFF.md §4.3).
@@ -28,6 +28,8 @@ export interface CachedVoucher {
   listingSlug?: string;
   listingTitle: string;
   thumbnailKey?: string;
+  thumbnail?: Thumbnail;
+  imageUrl?: string;
   optionId?: string;
   optionName: string;
   slotId?: string;

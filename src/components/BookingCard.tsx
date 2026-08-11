@@ -1,9 +1,11 @@
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { BookingStatusBadge } from "./BookingStatusBadge";
 import { TONE_BARS } from "@/mocks/placeholders";
 import { formatDate, formatPrice } from "@/utils/format";
+import { cn } from "@/utils/cn";
 import type { Booking } from "@/types";
 
 /**
@@ -12,6 +14,12 @@ import type { Booking } from "@/types";
 export function BookingCard({ booking }: { booking: Booking }) {
   const router = useRouter();
   const first = booking.items[0];
+
+  const tone =
+    TONE_BARS[
+      (first?.thumbnail?.tone ??
+        (first?.thumbnailKey as keyof typeof TONE_BARS)) as keyof typeof TONE_BARS
+    ] ?? "bg-ink-200";
 
   return (
     <Pressable
@@ -26,10 +34,31 @@ export function BookingCard({ booking }: { booking: Booking }) {
       </View>
 
       <View className="mt-3 flex-row gap-3">
-        <View
-          className={`h-16 w-16 rounded-xl items-center justify-center ${TONE_BARS[first?.thumbnailKey as keyof typeof TONE_BARS] ?? "bg-ink-200"}`}
-        >
-          <Text className="text-2xl">{first?.title.slice(0, 1) ?? "🧾"}</Text>
+        <View className="h-16 w-16 rounded-xl overflow-hidden bg-ink-200">
+          {first?.imageUrl ? (
+            <Image
+              source={{ uri: first.imageUrl }}
+              className="w-full h-full"
+              style={{ width: "100%", height: "100%" }}
+              contentFit="cover"
+            />
+          ) : first?.thumbnail ? (
+            <View className={cn("flex-1 items-center justify-center", tone)}>
+              <Text className="text-2xl leading-7">
+                {first.thumbnail.emoji}
+              </Text>
+              <Text
+                className="mt-0.5 px-1 text-center text-[9px] font-bold text-white"
+                numberOfLines={1}
+              >
+                {first.thumbnail.label}
+              </Text>
+            </View>
+          ) : (
+            <View className="flex-1 items-center justify-center">
+              <Text className="text-2xl">{first?.title.slice(0, 1) ?? "🧾"}</Text>
+            </View>
+          )}
         </View>
         <View className="flex-1">
           <Text className="text-sm font-semibold text-ink-900" numberOfLines={2}>

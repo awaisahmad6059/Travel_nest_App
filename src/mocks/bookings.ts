@@ -1,4 +1,5 @@
-import type { Booking } from "@/types";
+import type { Booking, ListingImage, Thumbnail } from "@/types";
+import { MOCK_LISTINGS } from "./listings";
 
 const daysFromNow = (n: number) => {
   const d = new Date();
@@ -11,6 +12,12 @@ const daysAgo = (n: number) => {
   d.setDate(d.getDate() - n);
   return d.toISOString();
 };
+
+const listingThumb = (id: string): Thumbnail | undefined =>
+  MOCK_LISTINGS.find((l) => l.id === id)?.thumbnail;
+
+const listingImage = (id: string): ListingImage | undefined =>
+  MOCK_LISTINGS.find((l) => l.id === id)?.images[0];
 
 /**
  * Bookings for the demo customer (customer@demo.com).
@@ -26,6 +33,8 @@ export const MOCK_BOOKINGS: Booking[] = [
         listingSlug: "interlaken-paragliding",
         title: "Interlaken Tandem Paragliding Flight",
         thumbnailKey: "paragliding",
+        thumbnail: listingThumb("lst_001"),
+        imageUrl: listingImage("lst_001")?.url,
         optionName: "Classic Flight",
         date: daysFromNow(7),
         quantity: 2,
@@ -52,6 +61,8 @@ export const MOCK_BOOKINGS: Booking[] = [
         listingSlug: "tokyo-izakaya-food-tour",
         title: "Shinjuku Izakaya Hopping Food Tour",
         thumbnailKey: "tokyo-food",
+        thumbnail: listingThumb("lst_003"),
+        imageUrl: listingImage("lst_003")?.url,
         optionName: "Classic Tour",
         date: daysFromNow(3),
         quantity: 1,
@@ -78,6 +89,8 @@ export const MOCK_BOOKINGS: Booking[] = [
         listingSlug: "bali-nusa-penida-day-trip",
         title: "Nusa Penida Island Day Trip by Speedboat",
         thumbnailKey: "nusa-penida",
+        thumbnail: listingThumb("lst_002"),
+        imageUrl: listingImage("lst_002")?.url,
         optionName: "West Side Highlights",
         date: daysFromNow(14),
         quantity: 2,
@@ -104,6 +117,8 @@ export const MOCK_BOOKINGS: Booking[] = [
         listingSlug: "reykjavik-blue-lagoon-express",
         title: "Blue Lagoon Express Entry + Transfer",
         thumbnailKey: "blue-lagoon",
+        thumbnail: listingThumb("lst_005"),
+        imageUrl: listingImage("lst_005")?.url,
         optionName: "Comfort package",
         date: daysAgo(21),
         quantity: 2,
@@ -130,6 +145,8 @@ export const MOCK_BOOKINGS: Booking[] = [
         listingSlug: "dubai-desert-safari",
         title: "Dubai Red Dune Desert Safari with BBQ",
         thumbnailKey: "dubai-desert",
+        thumbnail: listingThumb("lst_009"),
+        imageUrl: listingImage("lst_009")?.url,
         optionName: "Evening safari",
         date: daysAgo(5),
         quantity: 3,
@@ -163,6 +180,8 @@ export const MOCK_SUPPLIER_BOOKINGS: Booking[] = [
         listingSlug: "interlaken-paragliding",
         title: "Interlaken Tandem Paragliding Flight",
         thumbnailKey: "paragliding",
+        thumbnail: listingThumb("lst_001"),
+        imageUrl: listingImage("lst_001")?.url,
         optionName: "Classic Flight",
         date: daysFromNow(1),
         quantity: 1,
@@ -188,6 +207,8 @@ export const MOCK_SUPPLIER_BOOKINGS: Booking[] = [
         listingSlug: "interlaken-paragliding",
         title: "Interlaken Tandem Paragliding Flight",
         thumbnailKey: "paragliding",
+        thumbnail: listingThumb("lst_001"),
+        imageUrl: listingImage("lst_001")?.url,
         optionName: "Flight + Photo & Video",
         date: daysFromNow(1),
         quantity: 2,
@@ -213,6 +234,8 @@ export const MOCK_SUPPLIER_BOOKINGS: Booking[] = [
         listingSlug: "interlaken-paragliding",
         title: "Interlaken Tandem Paragliding Flight",
         thumbnailKey: "paragliding",
+        thumbnail: listingThumb("lst_001"),
+        imageUrl: listingImage("lst_001")?.url,
         optionName: "Classic Flight",
         date: daysFromNow(2),
         quantity: 1,
@@ -238,6 +261,8 @@ export const MOCK_SUPPLIER_BOOKINGS: Booking[] = [
         listingSlug: "interlaken-paragliding",
         title: "Interlaken Tandem Paragliding Flight",
         thumbnailKey: "paragliding",
+        thumbnail: listingThumb("lst_001"),
+        imageUrl: listingImage("lst_001")?.url,
         optionName: "Classic Flight",
         date: daysAgo(6),
         quantity: 4,

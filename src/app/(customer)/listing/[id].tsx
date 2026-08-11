@@ -16,6 +16,8 @@ import { AppMap } from "@/components/AppMap";
 import { useListing, useRelatedListings } from "@/features/listing/useListing";
 import { useListingReviews } from "@/features/supplier/useSupplier";
 import { useSlots } from "@/features/booking/useBookings";
+import { availabilityApi } from "@/api/availabilityApi";
+import type { Slot } from "@/api/contracts";
 import { useBookingDraft } from "@/store/bookingDraftStore";
 import { useWishlist } from "@/store/wishlistStore";
 import { formatDate, formatLongDate } from "@/utils/format";
@@ -279,12 +281,11 @@ function BookingSheet({
   const router = useRouter();
   const { setDraft } = useBookingDraft();
   const { data: slotsData } = useSlots(listing.id);
-  const slots = (slotsData ?? [])
+  const baseSlots = (slotsData ?? [])
     .filter((s) => !isPastDate(s.startTime))
     .sort(
       (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
     );
-  const hasRealSlots = slots.length > 0;
 
   const windowDates = rollingDates(7);
   const [customDates, setCustomDates] = useState<string[]>([]);
@@ -294,7 +295,13 @@ function BookingSheet({
   const [optionId, setOptionId] = useState(listing.options[0]?.id ?? "");
   const [qty, setQty] = useState(1);
   const [showCalendar, setShowCalendar] = useState(false);
+  // Demo slots generated on demand for future dates picked via the calendar
+  // ("More dates") that the window/backend has no slots for yet.
+  const [demoSlots, setDemoSlots] = useState<Slot[]>([]);
   const dateScrollRef = useRef<ScrollView>(null);
+
+  const slots = [...baseSlots, ...demoSlots];
+  const hasRealSlots = slots.length > 0;
 
   const windowKeys = new Set(windowDates.map(dayKey));
 
@@ -349,11 +356,26 @@ function BookingSheet({
     if (hasRealSlots) {
       const options = slotsForDay(dayKey(iso));
       if (options.length === 0) {
-        Alert.alert(
-          "No availability",
-          "There are no open slots on this date. Pick a date with availability instead.",
-        );
+        if (isPastDate(iso)) {
+          Alert.alert(
+            "No availability",
+            "There are no open slots on this date. Pick a date with availability instead.",
+          );
+          setShowCalendar(false);
+          return;
+        }
+        // Future date outside the window/backend: generate demo slots for it
+        // (same 9 AM/1 PM/5 PM pattern as the rolling window) so the day stays
+        // bookable instead of showing "No availability".
+        const generated = availabilityApi.demoSlotsForDate(listing.id, iso);
+        setDemoSlots((prev) => [...prev, ...generated]);
+        setSelectedDay(dayKey(iso));
+        setSlotId(undefined);
         setShowCalendar(false);
+        setTimeout(
+          () => dateScrollRef.current?.scrollToEnd({ animated: true }),
+          150,
+        );
         return;
       }
       setSelectedDay(dayKey(iso));

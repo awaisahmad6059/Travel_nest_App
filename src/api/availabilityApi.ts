@@ -1,5 +1,5 @@
 import { USE_MOCKS_AVAILABILITY } from "@/config";
-import { isPastDate } from "@/utils/dateUtils";
+import { isPastDate, dayKey } from "@/utils/dateUtils";
 import { request, mockDelay } from "./client";
 import {
   Hold,
@@ -18,29 +18,26 @@ function hashCode(str: string): number {
   return h;
 }
 
-// TEMP: remove once the backend seed data has future-dated slots. The deployed
-// seed only contains past dates (e.g. 2026-08-05/06), so this generates demo
-// slots across the rolling 7-day window to keep the demo fully bookable.
-function demoSlotsFor(listingId: string): Slot[] {
+const DEMO_PATTERNS: number[][][] = [
+  [
+    [9, 0],
+    [13, 0],
+    [17, 0],
+  ],
+  [[9, 0]],
+  [
+    [10, 0],
+    [16, 0],
+  ],
+];
+
+function buildDemoSlots(listingId: string, dates: string[]): Slot[] {
   const seed = hashCode(listingId);
-  const patterns = [
-    [
-      [9, 0],
-      [13, 0],
-      [17, 0],
-    ],
-    [[9, 0]],
-    [
-      [10, 0],
-      [16, 0],
-    ],
-  ];
-  const times = patterns[seed % 3];
+  const times = DEMO_PATTERNS[seed % 3];
   const slots: Slot[] = [];
-  for (let i = 0; i < 7; i++) {
-    const day = new Date();
+  dates.forEach((iso, i) => {
+    const day = new Date(iso);
     day.setHours(0, 0, 0, 0);
-    day.setDate(day.getDate() + i);
     times.forEach(([h, m], ti) => {
       const start = new Date(day);
       start.setHours(h, m, 0, 0);
@@ -49,7 +46,7 @@ function demoSlotsFor(listingId: string): Slot[] {
       const key = seed + i * 3 + ti;
       const remaining = (key * 13 + seed) % 20;
       slots.push({
-        id: `demo-${listingId}-${i}-${ti}`,
+        id: `demo-${listingId}-${dayKey(start.toISOString())}-${ti}`,
         listingId,
         startTime: start.toISOString(),
         endTime: end.toISOString(),
@@ -59,8 +56,22 @@ function demoSlotsFor(listingId: string): Slot[] {
         remaining,
       });
     });
-  }
+  });
   return slots;
+}
+
+// TEMP: remove once the backend seed data has future-dated slots. The deployed
+// seed only contains past dates (e.g. 2026-08-05/06), so this generates demo
+// slots across the rolling 7-day window to keep the demo fully bookable.
+function demoSlotsFor(listingId: string): Slot[] {
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() + i);
+    dates.push(day.toISOString());
+  }
+  return buildDemoSlots(listingId, dates);
 }
 
 /**
@@ -82,6 +93,14 @@ export const availabilityApi = {
     if (hasBookable) return real;
     // TEMP: see demoSlotsFor — backend seed has no future-dated slots yet.
     return mockDelay(demoSlotsFor(listingId), 250);
+  },
+
+  /**
+   * TEMP: demo slots for a single future date picked via the calendar
+   * ("More dates"), mirroring the rolling-window demo slot pattern.
+   */
+  demoSlotsForDate(listingId: string, isoDate: string): Slot[] {
+    return buildDemoSlots(listingId, [isoDate]);
   },
 
   async hold(req: HoldRequest): Promise<Hold> {

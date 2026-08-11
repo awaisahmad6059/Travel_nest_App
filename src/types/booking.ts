@@ -1,4 +1,4 @@
-import type { Price } from "./listing";
+import type { Price, Thumbnail } from "./listing";
 
 export type BookingStatus =
   | "pending"
@@ -18,6 +18,10 @@ export interface BookingItem {
   listingSlug: string;
   title: string;
   thumbnailKey: string;
+  /** Full placeholder thumbnail (emoji/tone/label) shown until real images exist. */
+  thumbnail?: Thumbnail;
+  /** Real listing image URL when available (empty pre-Cloudinary). */
+  imageUrl?: string;
   optionName: string;
   /** ISO date string for the activity date. */
   date: string;

@@ -138,6 +138,8 @@ export default function PaymentScreen() {
             listingSlug: draft.listingTitle,
             title: draft.listingTitle,
             thumbnailKey: draft.thumbnail.key,
+            thumbnail: draft.thumbnail,
+            imageUrl: draft.imageUrl,
             optionName: draft.optionName,
             date: draft.date,
             quantity: draft.quantity,
