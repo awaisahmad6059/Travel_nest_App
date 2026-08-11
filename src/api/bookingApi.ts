@@ -143,6 +143,32 @@ export const bookingApi = {
       return mockDelay(created, 900);
     }
     const lead = input.travelers[0];
+    // TEMP: demo slots (availabilityApi.demoSlotsFor) have no backend holds, so
+    // the backend can't validate their tokens. Simulate the booking locally and
+    // cache the voucher — confirmation, My Bookings and offline vouchers all
+    // read voucherCache, so the flow stays complete end-to-end.
+    if (input.holdId?.startsWith("hold_demo_")) {
+      const item = input.items[0];
+      const voucher: CachedVoucher = {
+        bookingId: `bk_demo_${Date.now()}`,
+        bookingRef: `TN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        qrVoucherCode: `TNV-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`,
+        listingId: item.listingId,
+        listingSlug: item.listingSlug,
+        listingTitle: item.title,
+        thumbnailKey: item.thumbnailKey,
+        optionName: item.optionName,
+        activityDate: item.date,
+        createdAt: new Date().toISOString(),
+        quantity: item.quantity,
+        currency: item.total.currency,
+        totalAmount: item.total.amount,
+        status: "confirmed",
+        travelers: input.travelers,
+      };
+      await voucherCache.saveVoucher(voucher);
+      return mockDelay(cachedVoucherToBooking(voucher), 300);
+    }
     if (!input.holdId) {
       throw new Error(
         "Missing inventory hold — hold a slot first via availabilityApi.hold() before checkout.",

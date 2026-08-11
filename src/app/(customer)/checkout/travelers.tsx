@@ -1,13 +1,13 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
-import { useCart } from "@/store/cartStore";
+import { useBookingDraft } from "@/store/bookingDraftStore";
 import { useCheckoutStore } from "@/store/checkoutStore";
 import { useSession } from "@/auth/sessionStore";
 import { useTravelersStore } from "@/store/travelersStore";
@@ -16,10 +16,10 @@ import { cn } from "@/utils/cn";
 
 export default function TravelersScreen() {
   const router = useRouter();
-  const { count } = useCart();
+  const { draft } = useBookingDraft();
+  const count = draft?.quantity ?? 1;
   const { user } = useSession();
   const {
-    travelers,
     contactName,
     contactEmail,
     contactPhone,
@@ -30,9 +30,6 @@ export default function TravelersScreen() {
     setLocations,
   } = useCheckoutStore();
 
-  const [names, setNames] = useState<string[]>(
-    Array.from({ length: count }).map((_, i) => travelers[i]?.name ?? (i === 0 ? user?.name ?? "" : "")),
-  );
   const [name, setName] = useState(contactName || user?.name || "");
   const [email, setEmail] = useState(contactEmail || user?.email || "");
   const [phone, setPhone] = useState(contactPhone || user?.phone || "");
@@ -42,17 +39,9 @@ export default function TravelersScreen() {
   const [error, setError] = useState<string | null>(null);
   const saved = useTravelersStore((s) => s.travelers);
 
-  function fillFromSaved(travellerName: string) {
-    const emptyIdx = names.findIndex((n) => !n.trim());
-    if (emptyIdx >= 0) {
-      setNames((prev) => prev.map((x, i) => (i === emptyIdx ? travellerName : x)));
-      return;
-    }
-    if (!name.trim()) {
-      setName(travellerName);
-      return;
-    }
-    Alert.alert("All filled", "Every traveller and the lead contact name are already filled in.");
+  // Tapping a saved traveller fills the customer name field.
+  function fillFromSaved(savedName: string) {
+    setName(savedName);
   }
 
   function onPickupChange(v: string) {
@@ -70,10 +59,7 @@ export default function TravelersScreen() {
 
   function onContinue() {
     if (!name.trim()) {
-      return setError("Please enter the lead traveller's name.");
-    }
-    if (names.some((n) => !n.trim())) {
-      return setError("Please fill in every traveller's name.");
+      return setError("Please enter the customer's name.");
     }
     if (!isValidEmail(email)) {
       return setError("Please enter a valid contact email.");
@@ -89,11 +75,14 @@ export default function TravelersScreen() {
       return setError("Please enter a drop-off location.");
     }
     setError(null);
-    const updated = names.map((n, i) => ({
-      id: `tr_${Date.now()}_${i}`,
-      name: n.trim(),
-    }));
-    setTravelers(updated);
+    setTravelers([
+      {
+        id: `tr_${Date.now()}`,
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+      },
+    ]);
     setContact({ name: name.trim(), email: email.trim(), phone: phone.trim() });
     setLocations(pickup.trim(), finalDropoff.trim());
     router.push("/checkout/payment");
@@ -116,46 +105,34 @@ export default function TravelersScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-3">
-          <Text className="text-sm font-semibold text-ink-900">
-            Traveller{count > 1 ? "s" : ""}
-          </Text>
-          {saved.length > 0 ? (
-            <View className="gap-2">
-              <Text className="text-xs text-ink-400">
-                Saved travellers — tap to auto-fill the next empty field
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerClassName="gap-2 pr-4"
-              >
-                {saved.map((t) => (
-                  <Chip
-                    key={t.id}
-                    label={t.name}
-                    onPress={() => fillFromSaved(t.name)}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-          {names.map((n, i) => (
-            <Input
-              key={i}
-              label={`Traveller ${i + 1}`}
-              placeholder="Full name"
-              value={n}
-              onChangeText={(v) =>
-                setNames((prev) => prev.map((x, idx) => (idx === i ? v : x)))
-              }
-            />
-          ))}
-        </View>
+        {saved.length > 0 ? (
+          <View className="gap-2">
+            <Text className="text-sm font-semibold text-ink-900">
+              Saved travellers
+            </Text>
+            <Text className="text-xs text-ink-400">
+              Tap a saved traveller to auto-fill the customer name.
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-2 pr-4"
+            >
+              {saved.map((t) => (
+                <Chip
+                  key={t.id}
+                  label={t.name}
+                  selected={name === t.name}
+                  onPress={() => fillFromSaved(t.name)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
 
         <View className="gap-3">
           <Text className="text-sm font-semibold text-ink-900">
-            Lead traveller & contact
+            Customer details
           </Text>
           <Input
             label="Customer name"

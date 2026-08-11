@@ -1,14 +1,10 @@
 import { create } from "zustand";
 import type { Traveler } from "@/types";
 
-/** Inventory hold (API_HANDOFF.md §4.2) for one cart line, keyed by listingId::optionId. */
+/** Inventory hold (API_HANDOFF.md §4.2) for the single booking being checked out. */
 export interface LineHold {
   holdId: string;
   expiresAt: number;
-}
-
-export function lineKey(listingId: string, optionId: string): string {
-  return `${listingId}::${optionId}`;
 }
 
 interface CheckoutState {
@@ -18,12 +14,12 @@ interface CheckoutState {
   contactPhone: string;
   pickupLocation: string;
   dropoffLocation: string;
-  holds: Record<string, LineHold>;
+  hold: LineHold | null;
   setTravelers: (travelers: Traveler[]) => void;
   setContact: (input: { name: string; email: string; phone: string }) => void;
   setLocations: (pickup: string, dropoff: string) => void;
-  setHold: (key: string, hold: LineHold) => void;
-  clearHolds: () => void;
+  setHold: (hold: LineHold) => void;
+  clearHold: () => void;
   reset: () => void;
 }
 
@@ -35,13 +31,13 @@ export const useCheckoutStore = create<CheckoutState>((set) => ({
   contactPhone: "",
   pickupLocation: "",
   dropoffLocation: "",
-  holds: {},
+  hold: null,
   setTravelers: (travelers) => set({ travelers }),
   setContact: ({ name, email, phone }) =>
     set({ contactName: name, contactEmail: email, contactPhone: phone }),
   setLocations: (pickupLocation, dropoffLocation) => set({ pickupLocation, dropoffLocation }),
-  setHold: (key, hold) => set((s) => ({ holds: { ...s.holds, [key]: hold } })),
-  clearHolds: () => set({ holds: {} }),
+  setHold: (hold) => set({ hold }),
+  clearHold: () => set({ hold: null }),
   reset: () =>
     set({
       travelers: [],
@@ -50,6 +46,6 @@ export const useCheckoutStore = create<CheckoutState>((set) => ({
       contactPhone: "",
       pickupLocation: "",
       dropoffLocation: "",
-      holds: {},
+      hold: null,
     }),
 }));

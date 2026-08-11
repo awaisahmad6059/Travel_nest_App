@@ -51,6 +51,7 @@ export default function ConfirmationScreen() {
   }, [params.bookingIds, params.bookingId]);
 
   const firstId = ids[0] ?? "";
+  console.log("[NAVDEBUG] confirmation MOUNTED: params =", JSON.stringify(params), "ids =", JSON.stringify(ids));
 
   return (
     <SafeAreaView className="flex-1 bg-surface-100">

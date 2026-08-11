@@ -99,6 +99,7 @@ export const Button = forwardRef<never, ButtonProps>(function Button(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
+        "will-change-pressable",
         "flex-row items-center justify-center",
         s.button,
         variantStyles[effectiveVariant],

@@ -6,14 +6,16 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { availabilityApi } from "@/api/availabilityApi";
 import { paymentApi } from "@/api/paymentApi";
+import { ApiError } from "@/api/client";
 import { useCreateBooking } from "@/features/booking/useBookings";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useCart } from "@/store/cartStore";
-import { lineKey, useCheckoutStore } from "@/store/checkoutStore";
+import { ListingImage } from "@/components/ListingImage";
+import { useBookingDraft } from "@/store/bookingDraftStore";
+import { useCheckoutStore } from "@/store/checkoutStore";
 import { cn } from "@/utils/cn";
+import { formatCurrency, formatDate } from "@/utils/format";
 import { mapPrice } from "@/api/contracts";
-import type { Booking } from "@/types";
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));
@@ -24,8 +26,8 @@ function formatCountdown(ms: number): string {
 
 export default function PaymentScreen() {
   const router = useRouter();
-  const { lines, coupon, clear, subtotal } = useCart();
-  const { travelers, contactEmail, contactPhone, holds, setHold, reset } =
+  const { draft, clearDraft } = useBookingDraft();
+  const { travelers, contactEmail, contactPhone, hold, setHold, clearHold, reset } =
     useCheckoutStore();
   const createBooking = useCreateBooking();
 
@@ -39,34 +41,28 @@ export default function PaymentScreen() {
   const [holdError, setHoldError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const needsHold = lines.filter((l) => l.slotId);
-  const earliestExpiry = (() => {
-    const times = needsHold
-      .map((l) => holds[lineKey(l.listingId, l.optionId)]?.expiresAt)
-      .filter((t): t is number => typeof t === "number");
-    return times.length ? Math.min(...times) : null;
-  })();
-  const holdsComplete = needsHold.every(
-    (l) => holds[lineKey(l.listingId, l.optionId)] != null,
-  );
+  const subtotal = draft ? draft.unitPrice * draft.quantity : 0;
+  const currency = draft?.currency ?? "USD";
+  const needsHold = !!draft?.slotId;
+  const earliestExpiry = hold?.expiresAt ?? null;
+  const holdsComplete = !needsHold || !!hold;
   const holdExpired = earliestExpiry != null && earliestExpiry <= now;
+  // Re-hold when the hold is missing or expired (covers server-side 409 too).
+  const needsRehold = needsHold && (!hold || holdExpired);
+  const total = subtotal;
 
   async function placeHolds() {
-    if (needsHold.length === 0) return;
+    if (!draft?.slotId) return;
     setHolding(true);
     setHoldError(null);
     try {
-      for (const line of needsHold) {
-        const key = lineKey(line.listingId, line.optionId);
-        const existing = holds[key];
-        if (existing && existing.expiresAt > Date.now()) continue;
-        const hold = await availabilityApi.hold({
-          slot_id: line.slotId as string,
-          option_id: line.optionId,
-          quantity: line.quantity,
-        });
-        setHold(key, hold);
-      }
+      if (hold && hold.expiresAt > Date.now()) return;
+      const h = await availabilityApi.hold({
+        slot_id: draft.slotId,
+        option_id: draft.optionId,
+        quantity: draft.quantity,
+      });
+      setHold(h);
     } catch (e) {
       setHoldError(
         e instanceof Error
@@ -78,7 +74,7 @@ export default function PaymentScreen() {
     }
   }
 
-  // Place holds once the screen opens, then tick a countdown while active.
+  // Place the hold once the screen opens, then tick a countdown while active.
   useEffect(() => {
     const t = setTimeout(() => {
       void placeHolds();
@@ -105,30 +101,25 @@ export default function PaymentScreen() {
     };
   }, []);
 
-  const discount = coupon
-    ? coupon.percentOff
-      ? (subtotal * coupon.percentOff) / 100
-      : Math.min(coupon.amountOff ?? 0, subtotal)
-    : 0;
-  const total = Math.max(0, subtotal - discount);
-
   async function pay() {
-    if (!selected) return;
-    if (needsHold.length > 0 && (holdExpired || !holdsComplete)) {
+    if (!selected || !draft) return;
+    if (needsRehold) {
       setError(
-        "Your inventory hold has expired. Tap re-hold to reserve the slot again before paying.",
+        "Your slot reservation is missing or expired. Tap Re-hold to reserve the slot again before paying.",
       );
       return;
     }
     setPaying(true);
     setError(null);
+    console.log("[NAVDEBUG] pay() start: draft.slotId =", draft.slotId, "hold =", hold);
     try {
       const result = await paymentApi.charge({
         amount: total,
-        currency: lines[0]?.currency ?? "USD",
+        currency,
         paymentMethodId: selected,
-        couponCode: coupon?.code ?? null,
+        couponCode: null,
       });
+      console.log("[NAVDEBUG] pay(): charge done, status =", result.status);
       if (result.status === "failure") {
         setError(result.message);
         setPaying(false);
@@ -136,47 +127,59 @@ export default function PaymentScreen() {
       }
       const paymentToken = result.transactionId;
 
-      // One booking per cart line, each backed by its own inventory hold.
-      const created: Booking[] = [];
-      for (const line of lines) {
-        const hold = line.slotId ? holds[lineKey(line.listingId, line.optionId)] : undefined;
-        const unitPrice = mapPrice(line.unitPrice, line.currency);
-        const lineTotal = mapPrice(line.unitPrice * line.quantity, line.currency);
-        const booking = await createBooking.mutateAsync({
-          items: [
-            {
-              listingId: line.listingId,
-              listingSlug: line.listingTitle,
-              title: line.listingTitle,
-              thumbnailKey: line.thumbnailKey,
-              optionName: line.optionName,
-              date: line.date,
-              quantity: line.quantity,
-              unitPrice,
-              total: lineTotal,
-            },
-          ],
-          travelers,
-          total: lineTotal,
-          holdId: hold?.holdId,
-          paymentToken,
-        });
-        created.push(booking);
-      }
+      // Single booking backed by its own inventory hold.
+      const unitPrice = mapPrice(draft.unitPrice, draft.currency);
+      const lineTotal = mapPrice(draft.unitPrice * draft.quantity, draft.currency);
+      console.log("[NAVDEBUG] pay(): BEFORE createBooking");
+      const booking = await createBooking.mutateAsync({
+        items: [
+          {
+            listingId: draft.listingId,
+            listingSlug: draft.listingTitle,
+            title: draft.listingTitle,
+            thumbnailKey: draft.thumbnail.key,
+            optionName: draft.optionName,
+            date: draft.date,
+            quantity: draft.quantity,
+            unitPrice,
+            total: lineTotal,
+          },
+        ],
+        travelers,
+        total: lineTotal,
+        holdId: draft.slotId ? hold?.holdId : undefined,
+        paymentToken,
+      });
+      console.log("[NAVDEBUG] pay(): AFTER createBooking, booking.id =", booking?.id, "bookingRef =", booking?.bookingRef);
 
-      clear();
-      reset();
+      const bookingId = booking.id;
+      const target = `/checkout/confirmation?bookingIds=${bookingId}`;
+      console.log("[NAVDEBUG] pay(): navigating to ->", target);
+      // Pop the checkout screens (listing/travelers/payment) so Back from
+      // confirmation or the voucher goes to Home, not back to Pay Now.
       router.dismissAll();
-      router.push(
-        `/checkout/confirmation?bookingIds=${created.map((b) => b.id).join(",")}`,
-      );
+      router.push({ pathname: "/checkout/confirmation", params: { bookingIds: bookingId } });
+      console.log("[NAVDEBUG] pay(): router.push() CALLED (enqueued)");
+
+      // Clean up checkout state only after navigation has been initiated so
+      // the confirmation route is not unmounted by a missing draft.
+      clearDraft();
+      reset();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Payment failed. Please try again.");
+      // The backend rejects booking with an expired/invalid hold (409). Treat
+      // it as "re-select/reserve" — clear the stale hold and show a clean
+      // action instead of the raw error.
+      if (e instanceof ApiError && e.status === 409) {
+        clearHold();
+        setError(
+          "Your slot reservation expired. Tap Re-hold to reserve the slot again, then try payment again.",
+        );
+      } else {
+        setError(e instanceof Error ? e.message : "Payment failed. Please try again.");
+      }
       setPaying(false);
     }
   }
-
-  const needsRehold = needsHold.length > 0 && holdExpired;
 
   return (
     <SafeAreaView className="flex-1 bg-surface-100">
@@ -189,8 +192,31 @@ export default function PaymentScreen() {
       </View>
 
       <View className="px-5 gap-5 pb-8">
+        {/* Booking summary — same listing image/data the user selected */}
+        {draft ? (
+          <View className="flex-row items-center gap-3 rounded-2xl border border-ink-100 bg-white p-3">
+            <ListingImage
+              thumbnail={draft.thumbnail}
+              url={draft.imageUrl}
+              className="h-16 w-16 rounded-xl"
+            />
+            <View className="flex-1">
+              <Text className="text-sm font-bold text-ink-900" numberOfLines={2}>
+                {draft.listingTitle}
+              </Text>
+              <Text className="mt-0.5 text-xs text-ink-500">
+                {draft.optionName} · {formatDate(draft.date)}
+                {draft.quantity > 1 ? ` · ${draft.quantity} pax` : ""}
+              </Text>
+              <Text className="mt-1 text-sm font-bold text-ink-900">
+                {formatCurrency(draft.unitPrice * draft.quantity, draft.currency)}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         {/* Inventory hold status */}
-        {needsHold.length > 0 ? (
+        {needsHold ? (
           <View
             className={cn(
               "rounded-2xl border px-4 py-3",
@@ -225,7 +251,7 @@ export default function PaymentScreen() {
               <View className="flex-row items-center justify-between gap-2">
                 <View className="flex-1">
                   <Text className="text-sm font-semibold text-amber-900">
-                    Inventory hold expired
+                    {hold ? "Inventory hold expired" : "No active slot reservation"}
                   </Text>
                   <Text className="text-xs text-amber-800">
                     Re-hold the slot to continue booking.
@@ -298,12 +324,6 @@ export default function PaymentScreen() {
             <Text className="text-sm text-ink-500">Subtotal</Text>
             <Text className="text-sm text-ink-700">${subtotal.toFixed(2)}</Text>
           </View>
-          {discount > 0 ? (
-            <View className="flex-row justify-between">
-              <Text className="text-sm text-ink-500">Discount ({coupon?.code})</Text>
-              <Text className="text-sm text-success-600 font-semibold">-${discount.toFixed(2)}</Text>
-            </View>
-          ) : null}
           <View className="h-px bg-ink-100 my-1" />
           <View className="flex-row justify-between items-center">
             <Text className="text-sm font-bold text-ink-900">Total</Text>

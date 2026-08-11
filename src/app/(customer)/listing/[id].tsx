@@ -16,19 +16,12 @@ import { AppMap } from "@/components/AppMap";
 import { useListing, useRelatedListings } from "@/features/listing/useListing";
 import { useListingReviews } from "@/features/supplier/useSupplier";
 import { useSlots } from "@/features/booking/useBookings";
-import { useCart } from "@/store/cartStore";
+import { useBookingDraft } from "@/store/bookingDraftStore";
 import { useWishlist } from "@/store/wishlistStore";
 import { formatDate, formatLongDate } from "@/utils/format";
 import { cn } from "@/utils/cn";
+import { rollingDates, isPastDate, dayKey, todayStart, startOfDay } from "@/utils/dateUtils";
 import type { Listing } from "@/types";
-
-function nextDays(count = 10) {
-  return Array.from({ length: count }).map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i + 1);
-    return d.toISOString();
-  });
-}
 
 /** Formats a slot ISO datetime as "HH:mm". */
 function slotTime(iso: string): string {
@@ -284,35 +277,78 @@ function BookingSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { addLine } = useCart();
+  const { setDraft } = useBookingDraft();
   const { data: slotsData } = useSlots(listing.id);
-  const slots = slotsData ?? [];
+  const slots = (slotsData ?? [])
+    .filter((s) => !isPastDate(s.startTime))
+    .sort(
+      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    );
   const hasRealSlots = slots.length > 0;
 
-  const [quickDates, setQuickDates] = useState(nextDays);
-  const [date, setDate] = useState(quickDates[0]);
+  const windowDates = rollingDates(7);
+  const [customDates, setCustomDates] = useState<string[]>([]);
+  const [date, setDate] = useState("");
+  const [selectedDay, setSelectedDay] = useState<string | undefined>(undefined);
   const [slotId, setSlotId] = useState<string | undefined>(undefined);
   const [optionId, setOptionId] = useState(listing.options[0]?.id ?? "");
   const [qty, setQty] = useState(1);
   const [showCalendar, setShowCalendar] = useState(false);
   const dateScrollRef = useRef<ScrollView>(null);
 
-  const selectedSlot = hasRealSlots
-    ? slots.find((s) => s.id === slotId) ?? slots[0]
+  const windowKeys = new Set(windowDates.map(dayKey));
+
+  // No default selection — the user must explicitly pick a date, then a time.
+  const selectedSlot = hasRealSlots && slotId
+    ? slots.find((s) => s.id === slotId)
     : undefined;
-  // Default to the first real slot when none is picked yet.
   const effectiveSlotId = selectedSlot?.id;
-  const effectiveDate =
-    hasRealSlots && selectedSlot ? selectedSlot.startTime : date;
+
+  const selectedDayKey =
+    selectedDay ?? (selectedSlot ? dayKey(selectedSlot.startTime) : undefined);
+
+  function slotsForDay(day: string) {
+    return slots.filter((s) => dayKey(s.startTime) === day);
+  }
+
+  const daySlots = selectedDayKey ? slotsForDay(selectedDayKey) : [];
+
+  // Mock path: the rolling window (fresh from the device date on every render)
+  // plus any dates added via the calendar, with past dates filtered out so a
+  // stale selection can never show or linger.
+  const visibleDates = [
+    ...windowDates,
+    ...customDates.filter((d) => !windowDates.includes(d) && !isPastDate(d)),
+  ];
+  const effectiveDate = hasRealSlots
+    ? selectedSlot
+      ? selectedSlot.startTime
+      : selectedDayKey
+        ? (slotsForDay(selectedDayKey)[0]?.startTime ?? "")
+        : ""
+    : date;
+
+  // Dates with availability in the 7-day window, plus the selected day when it
+  // was picked via the calendar and falls outside the window.
+  const windowDayKeys = Array.from(
+    new Set(
+      slots
+        .filter((s) => windowKeys.has(dayKey(s.startTime)))
+        .map((s) => dayKey(s.startTime)),
+    ),
+  );
+  const dateRowKeys = Array.from(
+    new Set([...windowDayKeys, ...(selectedDayKey ? [selectedDayKey] : [])]),
+  ).sort();
 
   const option = listing.options.find((o) => o.id === optionId) ?? listing.options[0];
+  const canBook = !!option && (hasRealSlots ? !!selectedSlot : !!date);
   const total = (option?.price.amount ?? listing.price.amount) * qty;
 
   function handleCalendarSelect(iso: string) {
     if (hasRealSlots) {
-      const day = iso.slice(0, 10);
-      const slot = slots.find((s) => s.startTime.slice(0, 10) === day);
-      if (!slot) {
+      const options = slotsForDay(dayKey(iso));
+      if (options.length === 0) {
         Alert.alert(
           "No availability",
           "There are no open slots on this date. Pick a date with availability instead.",
@@ -320,13 +356,19 @@ function BookingSheet({
         setShowCalendar(false);
         return;
       }
-      setSlotId(slot.id);
-      setDate(slot.startTime);
+      setSelectedDay(dayKey(iso));
+      setSlotId(undefined);
       setShowCalendar(false);
+      if (!windowKeys.has(dayKey(iso))) {
+        setTimeout(
+          () => dateScrollRef.current?.scrollToEnd({ animated: true }),
+          150,
+        );
+      }
       return;
     }
     setDate(iso);
-    setQuickDates((prev) =>
+    setCustomDates((prev) =>
       prev.includes(iso) ? prev : [...prev, iso].slice(-40),
     );
     setShowCalendar(false);
@@ -336,12 +378,13 @@ function BookingSheet({
     );
   }
 
-  function addToCart() {
-    if (!option) return;
-    addLine({
+  function bookNow() {
+    if (!option || !canBook) return;
+    setDraft({
       listingId: listing.id,
       listingTitle: listing.title,
-      thumbnailKey: listing.thumbnail.key,
+      thumbnail: listing.thumbnail,
+      imageUrl: listing.images[0]?.url,
       optionId: option.id,
       optionName: option.name,
       unitPrice: option.price.amount,
@@ -353,7 +396,7 @@ function BookingSheet({
       instantConfirmation: listing.instantConfirmation,
     });
     onClose();
-    router.push("/checkout");
+    router.push("/checkout/travelers");
   }
 
   return (
@@ -369,7 +412,13 @@ function BookingSheet({
               ${total.toFixed(2)}
             </Text>
           </View>
-          <Button title="Add to cart" size="lg" block onPress={addToCart} />
+          <Button
+            title="Book Now"
+            size="lg"
+            block
+            disabled={!canBook}
+            onPress={bookNow}
+          />
         </View>
       }
     >
@@ -391,7 +440,11 @@ function BookingSheet({
         </Pressable>
       </View>
       <Text className="text-xs text-ink-500 mb-2">
-        Selected: {formatLongDate(effectiveDate)}
+        {effectiveDate
+          ? `Selected: ${formatLongDate(effectiveDate)}${
+              selectedSlot ? ` · ${slotTime(selectedSlot.startTime)}` : ""
+            }`
+          : "No date selected yet"}
       </Text>
       <ScrollView
         horizontal
@@ -401,34 +454,30 @@ function BookingSheet({
       >
         <View className="flex-row gap-2 pr-4">
           {hasRealSlots
-            ? slots.map((slot) => {
-                const start = new Date(slot.startTime);
-                const day = start.getDate().toString();
-                const month = start.toLocaleDateString("en-GB", { month: "short" });
-                const time = slotTime(slot.startTime);
-                const selected = slot.id === selectedSlot?.id;
-                const soldOut = slot.remaining <= 0;
+            ? dateRowKeys.map((key) => {
+                const iso = slots.find((s) => dayKey(s.startTime) === key)
+                  ?.startTime;
+                const day = iso ? formatDate(iso).split(" ")[0] : key;
+                const month = iso ? formatDate(iso).split(" ")[1] : "";
+                const selected = key === selectedDayKey;
                 return (
                   <Pressable
-                    key={slot.id}
-                    disabled={soldOut}
+                    key={key}
                     onPress={() => {
-                      setSlotId(slot.id);
-                      setDate(slot.startTime);
+                      setSelectedDay(key);
+                      setSlotId(undefined);
                     }}
                     className={cn(
-                      "w-[72px] items-center rounded-2xl border py-2.5",
+                      "w-16 items-center rounded-2xl border py-3",
                       selected
                         ? "border-brand-600 bg-brand-600"
-                        : soldOut
-                          ? "border-ink-100 bg-ink-50"
-                          : "border-ink-200 bg-white",
+                        : "border-ink-200 bg-white",
                     )}
                   >
                     <Text
                       className={cn(
                         "text-xl font-bold",
-                        selected ? "text-white" : soldOut ? "text-ink-300" : "text-ink-900",
+                        selected ? "text-white" : "text-ink-900",
                       )}
                     >
                       {day}
@@ -436,42 +485,23 @@ function BookingSheet({
                     <Text
                       className={cn(
                         "text-xs",
-                        selected ? "text-brand-100" : soldOut ? "text-ink-300" : "text-ink-400",
+                        selected ? "text-brand-100" : "text-ink-400",
                       )}
                     >
                       {month}
                     </Text>
-                    <Text
-                      className={cn(
-                        "mt-1 text-[11px] font-semibold",
-                        selected ? "text-white" : soldOut ? "text-ink-300" : "text-ink-700",
-                      )}
-                    >
-                      {time}
-                    </Text>
-                    <Text
-                      className={cn(
-                        "mt-0.5 text-[10px]",
-                        selected
-                          ? "text-brand-100"
-                          : soldOut
-                            ? "text-danger-500"
-                            : "text-success-600",
-                      )}
-                    >
-                      {soldOut
-                        ? "Sold out"
-                        : slot.remaining <= 5
-                          ? `Only ${slot.remaining} left`
-                          : `${slot.remaining} seats`}
-                    </Text>
+                    {selected ? (
+                      <View className="mt-1">
+                        <Text className="text-brand-100 text-xs">✓</Text>
+                      </View>
+                    ) : null}
                   </Pressable>
                 );
               })
-            : quickDates.map((d) => {
+            : visibleDates.map((d) => {
                 const day = formatDate(d).split(" ")[0];
                 const month = formatDate(d).split(" ")[1];
-                const selected = date === d;
+                const selected = effectiveDate === d;
                 return (
                   <Pressable
                     key={d}
@@ -507,6 +537,73 @@ function BookingSheet({
               })}
         </View>
       </ScrollView>
+
+      {hasRealSlots ? (
+        selectedDayKey ? (
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-ink-900 mb-2">
+              Select time
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View className="flex-row gap-2 pr-4">
+                {daySlots.map((slot) => {
+                  const time = slotTime(slot.startTime);
+                  const selected = slot.id === slotId;
+                  const soldOut = slot.remaining <= 0;
+                  return (
+                    <Pressable
+                      key={slot.id}
+                      disabled={soldOut}
+                      onPress={() => setSlotId(slot.id)}
+                      className={cn(
+                        "w-[76px] items-center rounded-2xl border py-3",
+                        selected
+                          ? "border-brand-600 bg-brand-600"
+                          : soldOut
+                            ? "border-ink-100 bg-ink-50"
+                            : "border-ink-200 bg-white",
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          "text-base font-bold",
+                          selected
+                            ? "text-white"
+                            : soldOut
+                              ? "text-ink-300"
+                              : "text-ink-900",
+                        )}
+                      >
+                        {time}
+                      </Text>
+                      <Text
+                        className={cn(
+                          "mt-1 text-[10px]",
+                          selected
+                            ? "text-brand-100"
+                            : soldOut
+                              ? "text-danger-500"
+                              : "text-success-600",
+                        )}
+                      >
+                        {soldOut
+                          ? "Sold out"
+                          : slot.remaining <= 5
+                            ? `Only ${slot.remaining} left`
+                            : `${slot.remaining} seats`}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        ) : (
+          <Text className="text-xs text-ink-400 mb-4">
+            Select a date to see available times.
+          </Text>
+        )
+      ) : null}
 
       {showCalendar ? (
         <CalendarPicker
@@ -571,16 +668,14 @@ function CalendarPicker({
 }) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date(selected);
-    return new Date(d.getFullYear(), d.getMonth(), 1);
+    const base = Number.isNaN(d.getTime()) ? new Date() : d;
+    return new Date(base.getFullYear(), base.getMonth(), 1);
   });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayMs = today.getTime();
+  const todayMs = todayStart().getTime();
   const selectedMs = (() => {
     const d = new Date(selected);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
+    return Number.isNaN(d.getTime()) ? -1 : startOfDay(selected).getTime();
   })();
 
   const year = cursor.getFullYear();
@@ -595,7 +690,7 @@ function CalendarPicker({
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
   const canGoPrev =
-    cursor.getTime() > new Date(today.getFullYear(), today.getMonth(), 1).getTime();
+    cursor.getTime() > new Date(todayStart().getFullYear(), todayStart().getMonth(), 1).getTime();
 
   return (
     <View className="bg-white rounded-2xl border border-ink-200 p-3 mb-4">

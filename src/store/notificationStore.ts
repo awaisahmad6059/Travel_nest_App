@@ -1,16 +1,16 @@
 import { create } from "zustand";
-import { useCartStore } from "./cartStore";
+import { useBookingDraftStore } from "./bookingDraftStore";
 import { useCheckoutStore } from "./checkoutStore";
 
 /**
  * Local, event-driven notifications (API_HANDOFF.md §5.4 mobile module is not
  * built yet, so no push backend — this is a client-side feed).
  *
- * Events are wired at module load by subscribing to the existing cart and
- * checkout stores (no changes to those files were needed):
- *   - cart item added  -> "Added to cart"
- *   - inventory hold   -> "Spot reserved" + scheduled "Hold expiring soon"
- *   - checkout success -> "Booking confirmed" (the payment flow clears holds)
+ * Events are wired at module load by subscribing to the booking draft and
+ * checkout stores:
+ *   - booking draft set  -> "Booking ready" (Book Now tapped)
+ *   - inventory hold     -> "Spot reserved" + scheduled "Hold expiring soon"
+ *   - checkout success   -> "Booking confirmed" (the payment flow clears holds)
  */
 
 export type NotificationKind = "cart" | "booking" | "hold" | "info";
@@ -77,38 +77,29 @@ const HOLD_WARN_MS = 5 * 60 * 1000;
 const holdWarningsFired = new Set<string>();
 let wired = false;
 
-function lineCount(lines: { quantity: number }[]): number {
-  return lines.reduce((n, l) => n + l.quantity, 0);
-}
-
 /**
- * Starts listening to cart/checkout events and turns them into notifications.
+ * Starts listening to booking/checkout events and turns them into notifications.
  * Idempotent — safe to call from multiple places.
  */
 export function initNotifications(): void {
   if (wired) return;
   wired = true;
 
-  useCartStore.subscribe((state, prev) => {
-    const count = lineCount(state.lines);
-    const prevCount = lineCount(prev.lines);
-    if (count <= prevCount) return;
-    const last = state.lines[state.lines.length - 1];
+  useBookingDraftStore.subscribe((state, prev) => {
+    if (!state.draft || prev.draft === state.draft) return;
     useNotificationStore.getState().add({
       kind: "cart",
-      title: "Added to cart",
-      body: last
-        ? `${last.listingTitle} is now in your cart.`
-        : "An item was added to your cart.",
+      title: "Booking ready",
+      body: `${state.draft.listingTitle} is ready for checkout.`,
     });
   });
 
   useCheckoutStore.subscribe((state, prev) => {
-    const prevHoldKeys = Object.keys(prev.holds);
-    const holdKeys = Object.keys(state.holds);
+    const prevHold = prev.hold;
+    const hold = state.hold;
 
-    // Booking confirmed — the payment flow clears all holds on success.
-    if (prevHoldKeys.length > 0 && holdKeys.length === 0) {
+    // Booking confirmed — the payment flow clears the hold on success.
+    if (prevHold && !hold) {
       useNotificationStore.getState().add({
         kind: "booking",
         title: "Booking confirmed",
@@ -117,9 +108,7 @@ export function initNotifications(): void {
     }
 
     // New inventory hold — reserve notice + a scheduled "expiring soon" nudge.
-    for (const key of holdKeys) {
-      if (prev.holds[key]) continue;
-      const hold = state.holds[key];
+    if (!prevHold && hold) {
       useNotificationStore.getState().add({
         kind: "hold",
         title: "Spot reserved",
@@ -127,9 +116,9 @@ export function initNotifications(): void {
       });
       const delay = Math.max(1000, hold.expiresAt - HOLD_WARN_MS - Date.now());
       setTimeout(() => {
-        const current = useCheckoutStore.getState().holds[key];
-        if (!current || holdWarningsFired.has(key)) return;
-        holdWarningsFired.add(key);
+        const current = useCheckoutStore.getState().hold;
+        if (!current || holdWarningsFired.has(hold.holdId)) return;
+        holdWarningsFired.add(hold.holdId);
         useNotificationStore.getState().add({
           kind: "hold",
           title: "Hold expiring soon",
