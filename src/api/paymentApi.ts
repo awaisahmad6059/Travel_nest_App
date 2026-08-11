@@ -1,6 +1,7 @@
 import { USE_MOCKS_PAYMENTS } from "@/config";
 import { request, mockDelay } from "./client";
 import type { Coupon, PaymentMethod, PaymentResult } from "@/types";
+import { usePaymentMethodsStore } from "@/store/paymentMethodsStore";
 
 /**
  * Payments — STUBBED (API_HANDOFF.md).
@@ -18,9 +19,12 @@ export const MOCK_PAYMENT_METHODS: PaymentMethod[] = [
 
 export const paymentApi = {
   async getPaymentMethods(): Promise<PaymentMethod[]> {
-    if (USE_MOCKS_PAYMENTS) return mockDelay(MOCK_PAYMENT_METHODS, 300);
+    // Single source of truth with Profile -> Payment methods: checkout shows
+    // the same local store, so cards added/removed there appear here too.
+    await usePaymentMethodsStore.getState().hydrate();
+    if (USE_MOCKS_PAYMENTS) return mockDelay(usePaymentMethodsStore.getState().cards, 300);
     // No ready endpoint — keep local saved methods for now.
-    return mockDelay(MOCK_PAYMENT_METHODS, 300);
+    return mockDelay(usePaymentMethodsStore.getState().cards, 300);
   },
 
   async applyCoupon(code: string): Promise<Coupon | null> {

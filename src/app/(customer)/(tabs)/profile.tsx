@@ -1,21 +1,74 @@
-import { Alert, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter, type Href } from "expo-router";
+import { Alert, Image, Pressable, Text, View } from "react-native";
 
 import { useSession } from "@/auth/sessionStore";
 import { Avatar } from "@/components/ui/Avatar";
 import { Screen } from "@/components/ui/Screen";
 import { Button } from "@/components/ui/Button";
-
-const MENU = [
-  { icon: "notifications-outline" as const, label: "Notifications", hint: "Push alerts" },
-  { icon: "card-outline" as const, label: "Payment methods", hint: "Visa •••• 4242" },
-  { icon: "people-outline" as const, label: "Saved travellers", hint: "2 travellers" },
-  { icon: "globe-outline" as const, label: "Language & currency", hint: "English · USD" },
-  { icon: "shield-checkmark-outline" as const, label: "Help & support", hint: "FAQ, chat" },
-];
+import { useNotifications } from "@/store/notificationStore";
+import { usePaymentMethodsStore } from "@/store/paymentMethodsStore";
+import { useProfileStore } from "@/store/profileStore";
+import { LANGUAGES, useSettingsStore } from "@/store/settingsStore";
+import { useTravelersStore } from "@/store/travelersStore";
 
 export default function CustomerProfileScreen() {
+  const router = useRouter();
   const { user, signOut } = useSession();
+  const { unreadCount } = useNotifications();
+  const cards = usePaymentMethodsStore((s) => s.cards);
+  const travelers = useTravelersStore((s) => s.travelers);
+  const settings = useSettingsStore();
+  const { displayName, avatarUri } = useProfileStore();
+
+  const name = displayName?.trim() || user?.name || "Traveler";
+  const languageLabel =
+    LANGUAGES.find((l) => l.code === settings.language)?.label ?? "English";
+  const currencyLabel = settings.currency;
+
+  const MENU: {
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    hint: string;
+    href: Href;
+  }[] = [
+    {
+      icon: "person-outline",
+      label: "Edit profile",
+      hint: "Name & photo",
+      href: "/profile/edit",
+    },
+    {
+      icon: "notifications-outline",
+      label: "Notifications",
+      hint: unreadCount > 0 ? `${unreadCount} new alert${unreadCount > 1 ? "s" : ""}` : "No new alerts",
+      href: "/profile/notifications",
+    },
+    {
+      icon: "card-outline",
+      label: "Payment methods",
+      hint: cards.length > 0 ? cards[0].label : "No saved cards",
+      href: "/profile/payment-methods",
+    },
+    {
+      icon: "people-outline",
+      label: "Saved travellers",
+      hint: `${travelers.length} ${travelers.length === 1 ? "traveller" : "travellers"}`,
+      href: "/profile/travellers",
+    },
+    {
+      icon: "globe-outline",
+      label: "Language & currency",
+      hint: `${languageLabel} · ${currencyLabel}`,
+      href: "/profile/language-currency",
+    },
+    {
+      icon: "shield-checkmark-outline",
+      label: "Help & support",
+      hint: "FAQ, chat",
+      href: "/profile/help-support",
+    },
+  ];
 
   function onSignOut() {
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
@@ -27,23 +80,53 @@ export default function CustomerProfileScreen() {
   return (
     <Screen className="bg-surface-100">
       <View className="bg-brand-600 rounded-b-3xl px-5 pt-6 pb-8">
-        <Text className="text-white text-xl font-extrabold">Profile</Text>
-        <View className="mt-5 flex-row items-center gap-4">
-          <Avatar emoji={user?.avatarEmoji} size={64} className="border-2 border-white/40" />
+        <View className="flex-row items-center justify-between">
+          <Text className="text-white text-xl font-extrabold">Profile</Text>
+          <Pressable
+            onPress={() => router.push("/profile/notifications")}
+            hitSlop={8}
+            className="relative p-1"
+          >
+            <Ionicons name="notifications-outline" size={24} color="#ffffff" />
+            {unreadCount > 0 ? (
+              <View className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-danger-500 items-center justify-center px-1">
+                <Text className="text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
+
+        <Pressable
+          className="mt-5 flex-row items-center gap-4"
+          onPress={() => router.push("/profile/edit")}
+        >
+          <View className="relative">
+            {avatarUri ? (
+              <Image
+                source={{ uri: avatarUri }}
+                style={{ width: 64, height: 64, borderRadius: 32 }}
+              />
+            ) : (
+              <Avatar emoji={user?.avatarEmoji} size={64} className="border-2 border-white/40" />
+            )}
+            <View className="absolute bottom-0 right-0 bg-white rounded-full p-1.5 border border-ink-100">
+              <Ionicons name="pencil" size={12} color="#0a54d9" />
+            </View>
+          </View>
           <View className="flex-1">
-            <Text className="text-white text-lg font-bold">{user?.name}</Text>
+            <Text className="text-white text-lg font-bold">{name}</Text>
             <Text className="text-white/80 text-sm">{user?.email}</Text>
           </View>
-        </View>
+        </Pressable>
       </View>
 
       <View className="px-5 mt-6 gap-3">
         {MENU.map((item) => (
           <Pressable
             key={item.label}
-            onPress={() =>
-              Alert.alert(item.label, "This section ships in a later phase.")
-            }
+            onPress={() => router.push(item.href)}
             className="flex-row items-center bg-white rounded-2xl border border-ink-100 px-4 py-3.5"
           >
             <Ionicons name={item.icon} size={20} color="#0a54d9" />

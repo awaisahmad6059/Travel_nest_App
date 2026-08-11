@@ -1,14 +1,16 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Chip } from "@/components/ui/Chip";
 import { useCart } from "@/store/cartStore";
 import { useCheckoutStore } from "@/store/checkoutStore";
 import { useSession } from "@/auth/sessionStore";
+import { useTravelersStore } from "@/store/travelersStore";
 import { isValidEmail, isValidPhone } from "@/utils/format";
 import { cn } from "@/utils/cn";
 
@@ -38,6 +40,20 @@ export default function TravelersScreen() {
   const [dropoff, setDropoff] = useState(dropoffLocation || "");
   const [sameAsPickup, setSameAsPickup] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const saved = useTravelersStore((s) => s.travelers);
+
+  function fillFromSaved(travellerName: string) {
+    const emptyIdx = names.findIndex((n) => !n.trim());
+    if (emptyIdx >= 0) {
+      setNames((prev) => prev.map((x, i) => (i === emptyIdx ? travellerName : x)));
+      return;
+    }
+    if (!name.trim()) {
+      setName(travellerName);
+      return;
+    }
+    Alert.alert("All filled", "Every traveller and the lead contact name are already filled in.");
+  }
 
   function onPickupChange(v: string) {
     setPickup(v);
@@ -104,6 +120,26 @@ export default function TravelersScreen() {
           <Text className="text-sm font-semibold text-ink-900">
             Traveller{count > 1 ? "s" : ""}
           </Text>
+          {saved.length > 0 ? (
+            <View className="gap-2">
+              <Text className="text-xs text-ink-400">
+                Saved travellers — tap to auto-fill the next empty field
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerClassName="gap-2 pr-4"
+              >
+                {saved.map((t) => (
+                  <Chip
+                    key={t.id}
+                    label={t.name}
+                    onPress={() => fillFromSaved(t.name)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
           {names.map((n, i) => (
             <Input
               key={i}
