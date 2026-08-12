@@ -14,10 +14,12 @@ interface CheckoutState {
   contactPhone: string;
   pickupLocation: string;
   dropoffLocation: string;
+  specialRequirements: string;
   hold: LineHold | null;
   setTravelers: (travelers: Traveler[]) => void;
   setContact: (input: { name: string; email: string; phone: string }) => void;
   setLocations: (pickup: string, dropoff: string) => void;
+  setSpecialRequirements: (notes: string) => void;
   setHold: (hold: LineHold) => void;
   clearHold: () => void;
   reset: () => void;
@@ -31,11 +33,13 @@ export const useCheckoutStore = create<CheckoutState>((set) => ({
   contactPhone: "",
   pickupLocation: "",
   dropoffLocation: "",
+  specialRequirements: "",
   hold: null,
   setTravelers: (travelers) => set({ travelers }),
   setContact: ({ name, email, phone }) =>
     set({ contactName: name, contactEmail: email, contactPhone: phone }),
   setLocations: (pickupLocation, dropoffLocation) => set({ pickupLocation, dropoffLocation }),
+  setSpecialRequirements: (specialRequirements) => set({ specialRequirements }),
   setHold: (hold) => set({ hold }),
   clearHold: () => set({ hold: null }),
   reset: () =>
@@ -46,6 +50,7 @@ export const useCheckoutStore = create<CheckoutState>((set) => ({
       contactPhone: "",
       pickupLocation: "",
       dropoffLocation: "",
+      specialRequirements: "",
       hold: null,
     }),
 }));

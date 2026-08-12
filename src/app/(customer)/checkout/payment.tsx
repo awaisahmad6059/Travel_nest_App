@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -27,7 +27,7 @@ function formatCountdown(ms: number): string {
 export default function PaymentScreen() {
   const router = useRouter();
   const { draft, clearDraft } = useBookingDraft();
-  const { travelers, contactEmail, contactPhone, hold, setHold, clearHold, reset } =
+  const { travelers, contactEmail, contactPhone, specialRequirements, hold, setHold, clearHold, reset } =
     useCheckoutStore();
   const createBooking = useCreateBooking();
 
@@ -35,6 +35,11 @@ export default function PaymentScreen() {
   const [selected, setSelected] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Promo code (demo UI — API wiring comes later).
+  const [promoCode, setPromoCode] = useState("");
+  const [promoMessage, setPromoMessage] = useState<string | null>(null);
+  const [promoApplied, setPromoApplied] = useState<string | null>(null);
 
   // Inventory hold state (API_HANDOFF.md §4.2 / §4.4).
   const [holding, setHolding] = useState(false);
@@ -50,6 +55,20 @@ export default function PaymentScreen() {
   // Re-hold when the hold is missing or expired (covers server-side 409 too).
   const needsRehold = needsHold && (!hold || holdExpired);
   const total = subtotal;
+
+  function applyPromo() {
+    const code = promoCode.trim().toUpperCase();
+    if (!code) {
+      setPromoMessage("Enter a promo code.");
+      return;
+    }
+    if (code === "WELCOME20" || code === "SUMMER15" || code === "TRAVELNEST2026") {
+      setPromoApplied(code);
+      setPromoMessage(null);
+    } else {
+      setPromoMessage("Invalid promo code.");
+    }
+  }
 
   async function placeHolds() {
     if (!draft?.slotId) return;
@@ -151,6 +170,7 @@ export default function PaymentScreen() {
         total: lineTotal,
         holdId: draft.slotId ? hold?.holdId : undefined,
         paymentToken,
+        specialRequirements: specialRequirements.trim(),
       });
       console.log("[NAVDEBUG] pay(): AFTER createBooking, booking.id =", booking?.id, "bookingRef =", booking?.bookingRef);
 
@@ -326,10 +346,50 @@ export default function PaymentScreen() {
             <Text className="text-sm text-ink-500">Subtotal</Text>
             <Text className="text-sm text-ink-700">${subtotal.toFixed(2)}</Text>
           </View>
+          {promoApplied ? (
+            <View className="flex-row justify-between">
+              <Text className="text-sm text-success-600">
+                Promo Discount ({promoApplied})
+              </Text>
+              <Text className="text-sm text-success-600">
+                -${(subtotal * 0.15).toFixed(2)}
+              </Text>
+            </View>
+          ) : null}
           <View className="h-px bg-ink-100 my-1" />
           <View className="flex-row justify-between items-center">
             <Text className="text-sm font-bold text-ink-900">Total</Text>
             <Text className="text-xl font-extrabold text-ink-900">${total.toFixed(2)}</Text>
+          </View>
+
+          <View className="mt-3">
+            <Text className="text-xs font-semibold text-ink-700 mb-1.5">
+              Promo / Coupon Code
+            </Text>
+            <View className="flex-row gap-2">
+              <TextInput
+                value={promoCode}
+                onChangeText={setPromoCode}
+                placeholder="Try: WELCOME20, SUMMER15"
+                placeholderTextColor="#848d9c"
+                autoCapitalize="characters"
+                className="flex-1 bg-surface-100 border border-ink-200 rounded-xl px-3 py-2 text-sm text-ink-900"
+              />
+              <Pressable
+                onPress={applyPromo}
+                className="rounded-xl bg-brand-600 px-4 items-center justify-center"
+              >
+                <Text className="text-sm font-semibold text-white">Apply</Text>
+              </Pressable>
+            </View>
+            {promoMessage ? (
+              <Text className="mt-1.5 text-xs text-danger-600">{promoMessage}</Text>
+            ) : null}
+            {promoApplied ? (
+              <Text className="mt-1.5 text-xs text-success-600">
+                Promo code applied — 15% discount.
+              </Text>
+            ) : null}
           </View>
         </View>
 

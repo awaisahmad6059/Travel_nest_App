@@ -1,4 +1,5 @@
 import { Text, View } from "react-native";
+import { cn } from "@/utils/cn";
 
 /**
  * Mock QR code. Renders a deterministic pseudo-random grid based on the token
@@ -8,9 +9,14 @@ import { Text, View } from "react-native";
 export function QRCodePlaceholder({
   token,
   size = 180,
+  label,
+  labelClassName,
 }: {
   token: string;
   size?: number;
+  /** Text shown under the grid. Defaults to the raw token. */
+  label?: string;
+  labelClassName?: string;
 }) {
   const cells = 13;
   const seed = token
@@ -41,7 +47,9 @@ export function QRCodePlaceholder({
           );
         })}
       </View>
-      <Text className="text-center text-xs text-ink-500 mt-2">{token}</Text>
+      <Text className={cn("text-center text-xs text-ink-500 mt-2", labelClassName)}>
+        {label ?? token}
+      </Text>
     </View>
   );
 }

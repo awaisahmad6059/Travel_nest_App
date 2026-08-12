@@ -193,9 +193,16 @@ export const bookingApi = {
       method: "POST",
       body: JSON.stringify(body),
     });
-    // Offline voucher caching (API_HANDOFF.md §4.3 step 7).
-    await voucherCache.saveVoucher(bookingDtoToCachedVoucher(dto));
-    return bookingDtoToBooking(dto);
+    // Offline voucher caching (API_HANDOFF.md §4.3 step 7). The checkout DTO
+    // only carries the listing id, so carry the client-side thumbnail/image
+    // over into the cached voucher — otherwise My Bookings falls back to a bare
+    // first-letter placeholder instead of the listing image.
+    const voucher = bookingDtoToCachedVoucher(dto);
+    const bookedItem = input.items[0];
+    voucher.thumbnail = bookedItem?.thumbnail;
+    voucher.imageUrl = bookedItem?.imageUrl;
+    await voucherCache.saveVoucher(voucher);
+    return cachedVoucherToBooking(voucher);
   },
 
   async cancelBooking(id: string, reason?: string): Promise<Booking> {

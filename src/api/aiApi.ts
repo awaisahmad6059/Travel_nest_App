@@ -36,4 +36,24 @@ export const aiApi = {
     );
     return reviewSummaryDto(dto);
   },
+
+  /** Ask AI about a specific experience (listing-aware QA). */
+  async contextualQA(
+    listingId: string,
+    question: string,
+  ): Promise<{ answer: string }> {
+    if (USE_MOCKS_AI) {
+      return mockDelay(
+        {
+          answer:
+            "You can cancel up to 24 hours before the activity for a full refund. Need anything else?",
+        },
+        700,
+      );
+    }
+    return request<{ answer: string }>("/ai/contextual-qa", {
+      method: "POST",
+      body: JSON.stringify({ listing_id: listingId, question }),
+    });
+  },
 };

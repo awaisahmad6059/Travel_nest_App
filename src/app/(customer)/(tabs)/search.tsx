@@ -22,12 +22,31 @@ import { cn } from "@/utils/cn";
 import type { CategoryId, Listing, SearchFilters, SearchSort } from "@/types";
 
 export default function SearchScreen() {
-  const params = useLocalSearchParams<{ category?: string; sort?: string }>();
+  const params = useLocalSearchParams<{
+    category?: string;
+    sort?: string;
+    destination?: string;
+  }>();
   const initialCategory = (params.category as CategoryId) || null;
   const initialSort = (params.sort as SearchSort) || "recommended";
+  // The destinations API sends "Lahore, Pakistan" — keep just the city so the
+  // query matches the `destination` field the Home card renders.
+  const initialDestination = ((params.destination as string) ?? "")
+    .split(",")[0]
+    .trim();
 
-  const [query, setQuery] = useState("");
-  const [committedQuery, setCommittedQuery] = useState("");
+  const [query, setQuery] = useState(initialDestination);
+  const [committedQuery, setCommittedQuery] = useState(initialDestination);
+  const [prevDestination, setPrevDestination] = useState(initialDestination);
+
+  // Re-apply the destination param if it changes (e.g. tapping another city
+  // while the Search tab is already mounted). Adjust state during render — the
+  // sanctioned pattern for syncing state to a changing prop.
+  if (initialDestination && initialDestination !== prevDestination) {
+    setPrevDestination(initialDestination);
+    setQuery(initialDestination);
+    setCommittedQuery(initialDestination);
+  }
   const [category, setCategory] = useState<CategoryId | null>(initialCategory);
   const [filters, setFilters] = useState<SearchFilters>({});
   const [sort, setSort] = useState<SearchSort>(initialSort);

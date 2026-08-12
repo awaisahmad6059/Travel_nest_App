@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -25,9 +25,11 @@ export default function TravelersScreen() {
     contactPhone,
     pickupLocation,
     dropoffLocation,
+    specialRequirements,
     setTravelers,
     setContact,
     setLocations,
+    setSpecialRequirements,
   } = useCheckoutStore();
 
   const [name, setName] = useState(contactName || user?.name || "");
@@ -131,11 +133,8 @@ export default function TravelersScreen() {
         ) : null}
 
         <View className="gap-3">
-          <Text className="text-sm font-semibold text-ink-900">
-            Customer details
-          </Text>
           <Input
-            label="Customer name"
+            label="Full Name"
             placeholder="Full name"
             value={name}
             onChangeText={setName}
@@ -154,6 +153,22 @@ export default function TravelersScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+          />
+        </View>
+
+        <View className="gap-3">
+          <Text className="text-sm font-semibold text-ink-900">
+            Dietary or Mobility Notes
+          </Text>
+          <TextInput
+            value={specialRequirements}
+            onChangeText={setSpecialRequirements}
+            placeholder="e.g. Vegetarian meal, wheelchair access, allergies..."
+            placeholderTextColor="#848d9c"
+            multiline
+            numberOfLines={4}
+            className="bg-white border border-ink-200 rounded-xl px-4 py-3 text-base text-ink-900"
+            textAlignVertical="top"
           />
         </View>
 

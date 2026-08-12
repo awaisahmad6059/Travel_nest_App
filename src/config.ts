@@ -6,11 +6,12 @@
  * (https://travelnest-5ttl.onrender.com/api/v1). See API_HANDOFF.md for the
  * backend status per module.
  *
- * Real (backend live — §4.1–4.3):
- *   listings/search/detail, availability/slots/hold, bookings/checkout
- * Mock (backend not built yet — §5.1–5.3):
- *   auth/login, wishlist, reviews, supplier panel, payments (no gateway),
- *   AI chat/review-summary, push (no mobile module)
+ * Real (backend live — §4.1–4.3, reviews, AI):
+ *   listings/search/detail, availability/slots/hold, bookings/checkout,
+ *   reviews (list/create/helpful), AI chat + contextual QA + review summary
+ * Mock (backend not built yet — §5.1, §5.3):
+ *   auth/login, wishlist, supplier panel, payments (no gateway),
+ *   push (no mobile module)
  *
  * The wishlist is a client-side Zustand store and has no API flag.
  *
@@ -22,10 +23,10 @@ export const USE_MOCKS_LISTINGS = false;
 export const USE_MOCKS_AVAILABILITY = false;
 export const USE_MOCKS_BOOKINGS = false;
 export const USE_MOCKS_AUTH = true;
-export const USE_MOCKS_REVIEWS = true;
+export const USE_MOCKS_REVIEWS = false;
 export const USE_MOCKS_SUPPLIER = true;
 export const USE_MOCKS_PAYMENTS = true;
-export const USE_MOCKS_AI = true;
+export const USE_MOCKS_AI = false;
 export const USE_MOCKS_PUSH = true;
 
 export const API_BASE_URL =

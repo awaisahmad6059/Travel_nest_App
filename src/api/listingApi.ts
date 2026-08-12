@@ -3,6 +3,7 @@ import { request, mockDelay } from "./client";
 import {
   DEAL_IDS,
   MOCK_DESTINATIONS,
+  MOCK_DESTINATIONS_FEATURED,
   MOCK_LISTINGS,
   TRENDING_IDS,
 } from "@/mocks/listings";
@@ -22,15 +23,39 @@ import type { Listing, SearchParams, SearchResult } from "@/types";
  * `merchandising_badges` each listing returns (Bestseller / Likely to Sell
  * Out) and cheapest-first for the deals rail.
  */
+export interface FeaturedDestination {
+  slug: string;
+  name: string;
+  country: string;
+}
+
 export const listingApi = {
-  async getHomeFeed(): Promise<{ trending: Listing[]; deals: Listing[]; forYou: Listing[] }> {
+  async getHomeFeed(): Promise<{
+    trending: Listing[];
+    deals: Listing[];
+    forYou: Listing[];
+    topRated: Listing[];
+    popular: Listing[];
+    destinations: FeaturedDestination[];
+  }> {
     if (USE_MOCKS_LISTINGS) {
       const trending = MOCK_LISTINGS.filter((l) => TRENDING_IDS.includes(l.id));
       const deals = MOCK_LISTINGS.filter((l) => DEAL_IDS.includes(l.id));
       const forYou = MOCK_LISTINGS.filter(
         (l) => !trending.includes(l) && !deals.includes(l),
       ).slice(0, 4);
-      return mockDelay({ trending, deals, forYou });
+      const topRated = [...MOCK_LISTINGS]
+        .sort((a, b) => b.rating - a.rating)
+        .slice(0, 6);
+      const popular = [...MOCK_LISTINGS]
+        .sort((a, b) => b.reviewCount - a.reviewCount)
+        .slice(0, 6);
+      const destinations = MOCK_DESTINATIONS_FEATURED.map((d) => ({
+        slug: d.name.toLowerCase().replace(/\s+/g, "-"),
+        name: d.name,
+        country: d.country,
+      }));
+      return mockDelay({ trending, deals, forYou, topRated, popular, destinations });
     }
     // For You rail comes from the AI endpoint; trending/deals from /listings.
     let forYou: Listing[] = [];
@@ -58,7 +83,27 @@ export const listingApi = {
     if (!forYou.length) {
       forYou = all.slice(0, 4).map(listingDtoToListing);
     }
-    return { trending, deals, forYou };
+    const topRated = [...all]
+      .sort((a, b) => (b.cached_rating_avg ?? 0) - (a.cached_rating_avg ?? 0))
+      .slice(0, 6)
+      .map(listingDtoToListing);
+    const popular = [...all]
+      .sort(
+        (a, b) =>
+          (b.cached_review_count ?? b.review_count ?? 0) -
+          (a.cached_review_count ?? a.review_count ?? 0),
+      )
+      .slice(0, 6)
+      .map(listingDtoToListing);
+    let destinations: FeaturedDestination[] = [];
+    try {
+      destinations = (await request<DestinationDTO[]>("/listings/destinations")).map(
+        (d) => ({ slug: d.slug, name: d.name, country: d.country ?? "" }),
+      );
+    } catch {
+      destinations = [];
+    }
+    return { trending, deals, forYou, topRated, popular, destinations };
   },
 
   async getListing(id: string): Promise<Listing | null> {
@@ -145,13 +190,22 @@ function applySearchFilters(items: Listing[], params: SearchParams): Listing[] {
   const city = params.city?.trim().toLowerCase() ?? "";
   const f = params.filters ?? {};
 
-  const qMatch = (l: Listing) =>
-    !query ||
-    l.title.toLowerCase().includes(query) ||
-    l.city.toLowerCase().includes(query) ||
-    l.country.toLowerCase().includes(query) ||
-    l.destination.toLowerCase().includes(query) ||
-    l.tags.some((t) => t.toLowerCase().includes(query));
+  // "Lahore, Pakistan" → ["lahore", "pakistan"]; plain "lahore" stays a
+  // single token. A listing matches if ANY token matches one of its fields —
+  // the backend stores the city in destination_id and the mapper exposes it
+  // as `Listing.destination`, exactly what the Home card renders.
+  const qTokens = query.split(",").map((t) => t.trim()).filter(Boolean);
+
+  const matchesField = (l: Listing, tok: string) =>
+    l.title.toLowerCase().includes(tok) ||
+    l.shortDescription.toLowerCase().includes(tok) ||
+    l.description.toLowerCase().includes(tok) ||
+    l.city.toLowerCase().includes(tok) ||
+    l.country.toLowerCase().includes(tok) ||
+    l.destination.toLowerCase().includes(tok) ||
+    l.tags.some((t) => t.toLowerCase().includes(tok));
+
+  const qMatch = (l: Listing) => !query || qTokens.some((tok) => matchesField(l, tok));
   const cityMatch = (l: Listing) =>
     !city ||
     l.city.toLowerCase().includes(city) ||

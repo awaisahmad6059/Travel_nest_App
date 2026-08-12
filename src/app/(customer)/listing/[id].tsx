@@ -1,6 +1,14 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -13,17 +21,20 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ListingImage } from "@/components/ListingImage";
 import { ReviewSummaryPanel } from "@/components/ReviewSummaryPanel";
 import { AppMap } from "@/components/AppMap";
-import { useListing, useRelatedListings } from "@/features/listing/useListing";
+import {
+  useContextualQA,
+  useCreateReview,
+  useListing,
+  useMarkReviewHelpful,
+  useRelatedListings,
+} from "@/features/listing/useListing";
 import { useListingReviews } from "@/features/supplier/useSupplier";
 import { useSlots } from "@/features/booking/useBookings";
-import { availabilityApi } from "@/api/availabilityApi";
-import type { Slot } from "@/api/contracts";
 import { useBookingDraft } from "@/store/bookingDraftStore";
 import { useWishlist } from "@/store/wishlistStore";
 import { formatDate, formatLongDate } from "@/utils/format";
 import { cn } from "@/utils/cn";
-import { rollingDates, isPastDate, dayKey, todayStart, startOfDay } from "@/utils/dateUtils";
-import type { Listing } from "@/types";
+import type { Listing, Review } from "@/types";
 
 /** Formats a slot ISO datetime as "HH:mm". */
 function slotTime(iso: string): string {
@@ -45,6 +56,29 @@ export default function ListingDetailScreen() {
   const { data: reviews } = useListingReviews(id);
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [aiAnswer, setAiAnswer] = useState("");
+  const contextualQA = useContextualQA();
+  const createReview = useCreateReview();
+  const markHelpful = useMarkReviewHelpful();
+
+  async function handleAskAI() {
+    if (!aiQuestion.trim()) return;
+    const res = await contextualQA.mutateAsync({
+      listingId: id,
+      question: aiQuestion.trim(),
+    });
+    setAiAnswer(res.answer);
+  }
+
+  function handleReviewSubmitted(review: Review) {
+    setReviewOpen(false);
+    Alert.alert(
+      "Review submitted",
+      `Thank you, ${review.authorName}! Your review has been published.`,
+    );
+  }
 
   if (isLoading) {
     return (
@@ -161,7 +195,65 @@ export default function ListingDetailScreen() {
           ) : null}
         </View>
 
-        {/* Itinerary */}
+        {/* Know Before You Go */}
+        {(listing.knowBeforeYouGo ?? []).length > 0 ? (
+          <View className="px-5 mt-6">
+            <Text className="text-lg font-bold text-ink-900 mb-3">
+              Know Before You Go
+            </Text>
+            <View className="bg-slate-50 border border-ink-100 rounded-2xl p-4 gap-2.5">
+              {(listing.knowBeforeYouGo ?? []).map((item, i) => (
+                <View key={i} className="flex-row gap-2.5 items-start">
+                  <Ionicons name="alert-circle-outline" size={18} color="#0a54d9" />
+                  <Text className="flex-1 text-sm text-ink-700 leading-5">{item}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Ask AI About This Experience */}
+        <View className="px-5 mt-6">
+          <View className="bg-white border border-ink-200 rounded-2xl p-4">
+            <View className="flex-row items-center gap-2 mb-3">
+              <Ionicons name="help-circle-outline" size={20} color="#0a54d9" />
+              <Text className="text-base font-bold text-ink-900">
+                Ask AI About This Experience
+              </Text>
+            </View>
+            <View className="flex-row gap-2">
+              <TextInput
+                value={aiQuestion}
+                onChangeText={setAiQuestion}
+                placeholder="Ask anything (e.g. &apos;Is this suitable for kids?&apos;)"
+                placeholderTextColor="#848d9c"
+                className="flex-1 bg-surface-100 border border-ink-200 rounded-xl px-4 py-3 text-sm text-ink-900"
+                onSubmitEditing={() => void handleAskAI()}
+                returnKeyType="send"
+              />
+              <Button
+                title={contextualQA.isPending ? "Asking..." : "Ask AI"}
+                size="md"
+                loading={contextualQA.isPending}
+                disabled={!aiQuestion.trim()}
+                onPress={() => void handleAskAI()}
+              />
+            </View>
+            {contextualQA.isError ? (
+              <Text className="mt-3 text-sm text-danger-600">
+                Sorry, I couldn&apos;t answer that right now. Please try again.
+              </Text>
+            ) : null}
+            {aiAnswer ? (
+              <View className="mt-3 bg-sky-50 border border-sky-200 rounded-xl p-3">
+                <Text className="text-sm text-sky-900 leading-5">
+                  <Text className="font-bold">🤖 AI Concierge Answer: </Text>
+                  {aiAnswer}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
         {listing.itinerary.length > 0 ? (
           <View className="px-5 mt-6">
             <Text className="text-lg font-bold text-ink-900 mb-3">Itinerary</Text>
@@ -201,28 +293,77 @@ export default function ListingDetailScreen() {
 
         {/* Reviews */}
         <View className="px-5 mt-6">
-          <Text className="text-lg font-bold text-ink-900 mb-3">Reviews</Text>
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-lg font-bold text-ink-900">
+              ⭐ Traveler Reviews{" "}
+              <Text className="text-sm font-normal text-ink-400">
+                ({listing.reviewCount})
+              </Text>
+            </Text>
+            <Button
+              title="Write a Review"
+              size="sm"
+              variant="primary"
+              onPress={() => setReviewOpen(true)}
+            />
+          </View>
           <ReviewSummaryPanel
             pros={listing.reviewSummary?.pros ?? []}
             cons={listing.reviewSummary?.cons ?? []}
+            sentimentScore={listing.reviewSummary?.sentimentScore}
           />
           <View className="mt-4 gap-4">
-            {(reviews ?? []).slice(0, 3).map((r) => (
+            {(reviews ?? []).map((r) => (
               <View key={r.id} className="bg-white rounded-2xl border border-ink-100 p-4">
                 <View className="flex-row items-center gap-2">
-                  <View className="h-8 w-8 rounded-full bg-brand-50 items-center justify-center">
-                    <Text className="text-base">{r.authorEmoji}</Text>
-                  </View>
+                  {r.avatarUrl ? (
+                    <Image source={{ uri: r.avatarUrl }} className="h-8 w-8 rounded-full" />
+                  ) : (
+                    <View className="h-8 w-8 rounded-full bg-brand-50 items-center justify-center">
+                      <Text className="text-base">{r.authorEmoji || "🧳"}</Text>
+                    </View>
+                  )}
                   <View className="flex-1">
                     <Text className="text-sm font-semibold text-ink-900">{r.authorName}</Text>
                     <RatingStars rating={r.rating} size={12} />
                   </View>
                   <Text className="text-xs text-ink-400">{formatDate(r.date)}</Text>
                 </View>
-                <Text className="mt-2 text-sm font-semibold text-ink-900">{r.title}</Text>
+                {r.title ? (
+                  <Text className="mt-2 text-sm font-semibold text-ink-900">{r.title}</Text>
+                ) : null}
                 <Text className="mt-1 text-sm text-ink-600 leading-5">{r.comment}</Text>
+                {r.photos && r.photos.length > 0 ? (
+                  <View className="mt-2 flex-row gap-2">
+                    {r.photos.slice(0, 4).map((p, i) => (
+                      <Image key={i} source={{ uri: p }} className="h-16 w-20 rounded-lg" />
+                    ))}
+                  </View>
+                ) : null}
+                {r.supplierReply ? (
+                  <View className="mt-3 bg-sky-50 border border-sky-200 rounded-xl p-3">
+                    <Text className="text-xs font-bold text-sky-700 mb-1">
+                      🛡️ Supplier Response
+                    </Text>
+                    <Text className="text-sm text-slate-700 leading-5">{r.supplierReply}</Text>
+                  </View>
+                ) : null}
+                <Pressable
+                  onPress={() => markHelpful.mutate(r.id)}
+                  className="mt-3 self-start flex-row items-center gap-1.5 rounded-full border border-ink-200 bg-surface-100 px-3 py-1.5"
+                >
+                  <Ionicons name="thumbs-up-outline" size={13} color="#64748b" />
+                  <Text className="text-xs text-ink-500">
+                    Helpful ({r.helpfulCount ?? 0})
+                  </Text>
+                </Pressable>
               </View>
             ))}
+            {(reviews ?? []).length === 0 ? (
+              <Text className="text-center text-sm text-ink-400 py-6">
+                No reviews yet. Be the first to share your experience!
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -257,13 +398,21 @@ export default function ListingDetailScreen() {
           <Text className="text-lg font-extrabold text-ink-900">{listing.price.display}</Text>
           <Text className="text-xs text-ink-400">per person</Text>
         </View>
-        <Button title="Book now" size="lg" onPress={() => setSheetOpen(true)} />
+        <Button title="Book slots" size="lg" onPress={() => setSheetOpen(true)} />
       </View>
 
       <BookingSheet
         listing={listing}
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
+      />
+
+      <WriteReviewSheet
+        listing={listing}
+        visible={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        onSubmit={createReview}
+        onSubmitted={handleReviewSubmitted}
       />
     </SafeAreaView>
   );
@@ -280,125 +429,23 @@ function BookingSheet({
 }) {
   const router = useRouter();
   const { setDraft } = useBookingDraft();
-  const { data: slotsData } = useSlots(listing.id);
-  const baseSlots = (slotsData ?? [])
-    .filter((s) => !isPastDate(s.startTime))
-    .sort(
-      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
-    );
+  const { data: slotsData, isLoading: slotsLoading } = useSlots(listing.id);
 
-  const windowDates = rollingDates(7);
-  const [customDates, setCustomDates] = useState<string[]>([]);
-  const [date, setDate] = useState("");
-  const [selectedDay, setSelectedDay] = useState<string | undefined>(undefined);
+  // Only real backend slots — no demo/placeholder dates (API_HANDOFF.md §4.2).
+  // Like the web, every slot the API returns is shown (seats reflect remaining).
+  const slots = (slotsData ?? []).sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+  );
+
   const [slotId, setSlotId] = useState<string | undefined>(undefined);
   const [optionId, setOptionId] = useState(listing.options[0]?.id ?? "");
   const [qty, setQty] = useState(1);
-  const [showCalendar, setShowCalendar] = useState(false);
-  // Demo slots generated on demand for future dates picked via the calendar
-  // ("More dates") that the window/backend has no slots for yet.
-  const [demoSlots, setDemoSlots] = useState<Slot[]>([]);
-  const dateScrollRef = useRef<ScrollView>(null);
 
-  const slots = [...baseSlots, ...demoSlots];
-  const hasRealSlots = slots.length > 0;
-
-  const windowKeys = new Set(windowDates.map(dayKey));
-
-  // No default selection — the user must explicitly pick a date, then a time.
-  const selectedSlot = hasRealSlots && slotId
-    ? slots.find((s) => s.id === slotId)
-    : undefined;
-  const effectiveSlotId = selectedSlot?.id;
-
-  const selectedDayKey =
-    selectedDay ?? (selectedSlot ? dayKey(selectedSlot.startTime) : undefined);
-
-  function slotsForDay(day: string) {
-    return slots.filter((s) => dayKey(s.startTime) === day);
-  }
-
-  const daySlots = selectedDayKey ? slotsForDay(selectedDayKey) : [];
-
-  // Mock path: the rolling window (fresh from the device date on every render)
-  // plus any dates added via the calendar, with past dates filtered out so a
-  // stale selection can never show or linger.
-  const visibleDates = [
-    ...windowDates,
-    ...customDates.filter((d) => !windowDates.includes(d) && !isPastDate(d)),
-  ];
-  const effectiveDate = hasRealSlots
-    ? selectedSlot
-      ? selectedSlot.startTime
-      : selectedDayKey
-        ? (slotsForDay(selectedDayKey)[0]?.startTime ?? "")
-        : ""
-    : date;
-
-  // Dates with availability in the 7-day window, plus the selected day when it
-  // was picked via the calendar and falls outside the window.
-  const windowDayKeys = Array.from(
-    new Set(
-      slots
-        .filter((s) => windowKeys.has(dayKey(s.startTime)))
-        .map((s) => dayKey(s.startTime)),
-    ),
-  );
-  const dateRowKeys = Array.from(
-    new Set([...windowDayKeys, ...(selectedDayKey ? [selectedDayKey] : [])]),
-  ).sort();
-
+  const selectedSlot = slotId ? slots.find((s) => s.id === slotId) : undefined;
   const option = listing.options.find((o) => o.id === optionId) ?? listing.options[0];
-  const canBook = !!option && (hasRealSlots ? !!selectedSlot : !!date);
+  const canBook = !!option && !!selectedSlot;
+  const maxQty = selectedSlot ? Math.min(selectedSlot.remaining, 10) : 10;
   const total = (option?.price.amount ?? listing.price.amount) * qty;
-
-  function handleCalendarSelect(iso: string) {
-    if (hasRealSlots) {
-      const options = slotsForDay(dayKey(iso));
-      if (options.length === 0) {
-        if (isPastDate(iso)) {
-          Alert.alert(
-            "No availability",
-            "There are no open slots on this date. Pick a date with availability instead.",
-          );
-          setShowCalendar(false);
-          return;
-        }
-        // Future date outside the window/backend: generate demo slots for it
-        // (same 9 AM/1 PM/5 PM pattern as the rolling window) so the day stays
-        // bookable instead of showing "No availability".
-        const generated = availabilityApi.demoSlotsForDate(listing.id, iso);
-        setDemoSlots((prev) => [...prev, ...generated]);
-        setSelectedDay(dayKey(iso));
-        setSlotId(undefined);
-        setShowCalendar(false);
-        setTimeout(
-          () => dateScrollRef.current?.scrollToEnd({ animated: true }),
-          150,
-        );
-        return;
-      }
-      setSelectedDay(dayKey(iso));
-      setSlotId(undefined);
-      setShowCalendar(false);
-      if (!windowKeys.has(dayKey(iso))) {
-        setTimeout(
-          () => dateScrollRef.current?.scrollToEnd({ animated: true }),
-          150,
-        );
-      }
-      return;
-    }
-    setDate(iso);
-    setCustomDates((prev) =>
-      prev.includes(iso) ? prev : [...prev, iso].slice(-40),
-    );
-    setShowCalendar(false);
-    setTimeout(
-      () => dateScrollRef.current?.scrollToEnd({ animated: true }),
-      150,
-    );
-  }
 
   function bookNow() {
     if (!option || !canBook) return;
@@ -412,8 +459,8 @@ function BookingSheet({
       unitPrice: option.price.amount,
       currency: option.price.currency,
       quantity: qty,
-      date: effectiveDate,
-      slotId: effectiveSlotId,
+      date: selectedSlot?.startTime ?? "",
+      slotId: selectedSlot?.id,
       freeCancellation: listing.freeCancellation,
       instantConfirmation: listing.instantConfirmation,
     });
@@ -444,198 +491,10 @@ function BookingSheet({
         </View>
       }
     >
-      <View className="flex-row items-center justify-between mb-1">
-        <Text className="text-sm font-semibold text-ink-900">Select date</Text>
-        <Pressable
-          onPress={() => setShowCalendar((v) => !v)}
-          className="flex-row items-center gap-1"
-          hitSlop={8}
-        >
-          <Ionicons
-            name={showCalendar ? "close-circle-outline" : "calendar-outline"}
-            size={16}
-            color="#0a54d9"
-          />
-          <Text className="text-xs font-semibold text-brand-600">
-            {showCalendar ? "Hide calendar" : "More dates"}
-          </Text>
-        </Pressable>
-      </View>
-      <Text className="text-xs text-ink-500 mb-2">
-        {effectiveDate
-          ? `Selected: ${formatLongDate(effectiveDate)}${
-              selectedSlot ? ` · ${slotTime(selectedSlot.startTime)}` : ""
-            }`
-          : "No date selected yet"}
+      <Text className="text-sm font-semibold text-ink-900 mb-2">
+        Select Ticket Option / Variant
       </Text>
-      <ScrollView
-        horizontal
-        ref={dateScrollRef}
-        showsHorizontalScrollIndicator={false}
-        className="mb-4"
-      >
-        <View className="flex-row gap-2 pr-4">
-          {hasRealSlots
-            ? dateRowKeys.map((key) => {
-                const iso = slots.find((s) => dayKey(s.startTime) === key)
-                  ?.startTime;
-                const day = iso ? formatDate(iso).split(" ")[0] : key;
-                const month = iso ? formatDate(iso).split(" ")[1] : "";
-                const selected = key === selectedDayKey;
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => {
-                      setSelectedDay(key);
-                      setSlotId(undefined);
-                    }}
-                    className={cn(
-                      "w-16 items-center rounded-2xl border py-3",
-                      selected
-                        ? "border-brand-600 bg-brand-600"
-                        : "border-ink-200 bg-white",
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        "text-xl font-bold",
-                        selected ? "text-white" : "text-ink-900",
-                      )}
-                    >
-                      {day}
-                    </Text>
-                    <Text
-                      className={cn(
-                        "text-xs",
-                        selected ? "text-brand-100" : "text-ink-400",
-                      )}
-                    >
-                      {month}
-                    </Text>
-                    {selected ? (
-                      <View className="mt-1">
-                        <Text className="text-brand-100 text-xs">✓</Text>
-                      </View>
-                    ) : null}
-                  </Pressable>
-                );
-              })
-            : visibleDates.map((d) => {
-                const day = formatDate(d).split(" ")[0];
-                const month = formatDate(d).split(" ")[1];
-                const selected = effectiveDate === d;
-                return (
-                  <Pressable
-                    key={d}
-                    onPress={() => setDate(d)}
-                    className={cn(
-                      "w-16 items-center rounded-2xl border py-3",
-                      selected ? "border-brand-600 bg-brand-600" : "border-ink-200 bg-white",
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        "text-xl font-bold",
-                        selected ? "text-white" : "text-ink-900",
-                      )}
-                    >
-                      {day}
-                    </Text>
-                    <Text
-                      className={cn(
-                        "text-xs",
-                        selected ? "text-brand-100" : "text-ink-400",
-                      )}
-                    >
-                      {month}
-                    </Text>
-                    {selected ? (
-                      <View className="mt-1">
-                        <Text className="text-brand-100 text-xs">✓</Text>
-                      </View>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-        </View>
-      </ScrollView>
-
-      {hasRealSlots ? (
-        selectedDayKey ? (
-          <View className="mb-4">
-            <Text className="text-sm font-semibold text-ink-900 mb-2">
-              Select time
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-2 pr-4">
-                {daySlots.map((slot) => {
-                  const time = slotTime(slot.startTime);
-                  const selected = slot.id === slotId;
-                  const soldOut = slot.remaining <= 0;
-                  return (
-                    <Pressable
-                      key={slot.id}
-                      disabled={soldOut}
-                      onPress={() => setSlotId(slot.id)}
-                      className={cn(
-                        "w-[76px] items-center rounded-2xl border py-3",
-                        selected
-                          ? "border-brand-600 bg-brand-600"
-                          : soldOut
-                            ? "border-ink-100 bg-ink-50"
-                            : "border-ink-200 bg-white",
-                      )}
-                    >
-                      <Text
-                        className={cn(
-                          "text-base font-bold",
-                          selected
-                            ? "text-white"
-                            : soldOut
-                              ? "text-ink-300"
-                              : "text-ink-900",
-                        )}
-                      >
-                        {time}
-                      </Text>
-                      <Text
-                        className={cn(
-                          "mt-1 text-[10px]",
-                          selected
-                            ? "text-brand-100"
-                            : soldOut
-                              ? "text-danger-500"
-                              : "text-success-600",
-                        )}
-                      >
-                        {soldOut
-                          ? "Sold out"
-                          : slot.remaining <= 5
-                            ? `Only ${slot.remaining} left`
-                            : `${slot.remaining} seats`}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          </View>
-        ) : (
-          <Text className="text-xs text-ink-400 mb-4">
-            Select a date to see available times.
-          </Text>
-        )
-      ) : null}
-
-      {showCalendar ? (
-        <CalendarPicker
-          selected={effectiveDate}
-          onSelect={handleCalendarSelect}
-        />
-      ) : null}
-
-      <Text className="text-sm font-semibold text-ink-900 mb-2">Select option</Text>
-      <View className="gap-2 mb-4">
+      <View className="gap-2 mb-5">
         {listing.options.map((o) => {
           const selected = o.id === optionId;
           return (
@@ -658,8 +517,64 @@ function BookingSheet({
         })}
       </View>
 
+      <Text className="text-sm font-semibold text-ink-900 mb-2">
+        Select Date & Time Slot
+      </Text>
+      {slotsLoading ? (
+        <View className="gap-2 mb-5">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </View>
+      ) : slots.length === 0 ? (
+        <View className="mb-5 rounded-2xl border border-ink-100 bg-surface-100 px-4 py-6 items-center">
+          <Ionicons name="calendar-outline" size={24} color="#848d9c" />
+          <Text className="mt-2 text-sm text-ink-500 text-center">
+            No available time slots for this experience right now. Please check back later.
+          </Text>
+        </View>
+      ) : (
+        <View className="gap-2 mb-5">
+          {slots.map((slot) => {
+            const selected = slot.id === slotId;
+            const soldOut = slot.remaining <= 0;
+            return (
+              <Pressable
+                key={slot.id}
+                disabled={soldOut}
+                onPress={() => setSlotId(slot.id)}
+                className={cn(
+                  "rounded-2xl border px-4 py-3",
+                  selected
+                    ? "border-brand-500 bg-brand-50"
+                    : soldOut
+                      ? "border-ink-100 bg-ink-50"
+                      : "border-ink-200 bg-white",
+                )}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1 mr-3">
+                    <Text className={cn("text-sm font-semibold", selected ? "text-brand-800" : soldOut ? "text-ink-400" : "text-ink-900")}>
+                      {formatLongDate(slot.startTime)}
+                    </Text>
+                    <Text className={cn("text-xs mt-0.5", selected ? "text-brand-600" : "text-ink-400")}>
+                      {slotTime(slot.startTime)}
+                    </Text>
+                  </View>
+                  <Text className={cn(
+                    "text-xs font-semibold",
+                    soldOut ? "text-danger-500" : selected ? "text-brand-700" : slot.remaining <= 3 ? "text-amber-600" : "text-success-600",
+                  )}>
+                    {soldOut ? "Sold Out" : `${slot.remaining} seats available`}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
       <View className="flex-row items-center justify-between mb-2">
-        <Text className="text-sm font-semibold text-ink-900">Quantity</Text>
+        <Text className="text-sm font-semibold text-ink-900">Number of Guests</Text>
         <View className="flex-row items-center gap-4">
           <Pressable
             onPress={() => setQty((q) => Math.max(1, q - 1))}
@@ -669,7 +584,7 @@ function BookingSheet({
           </Pressable>
           <Text className="text-base font-bold text-ink-900">{qty}</Text>
           <Pressable
-            onPress={() => setQty((q) => Math.min(10, q + 1))}
+            onPress={() => setQty((q) => Math.min(maxQty, q + 1))}
             className="h-9 w-9 rounded-full border border-ink-200 items-center justify-center"
           >
             <Text className="text-lg text-ink-700">+</Text>
@@ -680,107 +595,123 @@ function BookingSheet({
   );
 }
 
-/** Lightweight month calendar for picking a date beyond the quick-pick row. */
-function CalendarPicker({
-  selected,
-  onSelect,
+/** Inline star picker used by the write-review sheet. */
+function StarPicker({
+  value,
+  onChange,
 }: {
-  selected: string;
-  onSelect: (iso: string) => void;
+  value: number;
+  onChange: (v: number) => void;
 }) {
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date(selected);
-    const base = Number.isNaN(d.getTime()) ? new Date() : d;
-    return new Date(base.getFullYear(), base.getMonth(), 1);
-  });
-
-  const todayMs = todayStart().getTime();
-  const selectedMs = (() => {
-    const d = new Date(selected);
-    return Number.isNaN(d.getTime()) ? -1 : startOfDay(selected).getTime();
-  })();
-
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (Date | null)[] = [
-    ...Array.from({ length: firstWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)),
-  ];
-  const weeks: (Date | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-
-  const canGoPrev =
-    cursor.getTime() > new Date(todayStart().getFullYear(), todayStart().getMonth(), 1).getTime();
-
   return (
-    <View className="bg-white rounded-2xl border border-ink-200 p-3 mb-4">
-      <View className="flex-row items-center justify-between mb-1">
-        <Pressable
-          onPress={() => setCursor(new Date(year, month - 1, 1))}
-          disabled={!canGoPrev}
-          className="h-8 w-8 items-center justify-center"
-        >
-          <Ionicons
-            name="chevron-back"
-            size={18}
-            color={canGoPrev ? "#14181f" : "#c3c9d4"}
-          />
-        </Pressable>
-        <Text className="text-sm font-bold text-ink-900">
-          {cursor.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
-        </Text>
-        <Pressable
-          onPress={() => setCursor(new Date(year, month + 1, 1))}
-          className="h-8 w-8 items-center justify-center"
-        >
-          <Ionicons name="chevron-forward" size={18} color="#14181f" />
-        </Pressable>
-      </View>
-
-      <View className="flex-row mb-1">
-        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((w) => (
-          <Text key={w} className="flex-1 text-center text-xs text-ink-400">
-            {w}
+    <View className="flex-row gap-1.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <Pressable key={s} onPress={() => onChange(s)} hitSlop={6}>
+          <Text style={{ fontSize: 30 }} className={s <= value ? "text-amber-400" : "text-ink-200"}>
+            ★
           </Text>
-        ))}
-      </View>
-
-      {weeks.map((week, wi) => (
-        <View key={wi} className="flex-row">
-          {week.map((d, di) => {
-            if (!d) return <View key={`e-${wi}-${di}`} className="flex-1 py-1.5" />;
-            const ms = d.getTime();
-            const disabled = ms < todayMs;
-            const isSelected = ms === selectedMs;
-            return (
-              <Pressable
-                key={`d-${wi}-${di}`}
-                disabled={disabled}
-                onPress={() => onSelect(d.toISOString())}
-                className={cn(
-                  "flex-1 items-center py-1.5",
-                  isSelected && "rounded-full bg-brand-600",
-                )}
-              >
-                <Text
-                  className={cn(
-                    "text-sm",
-                    isSelected
-                      ? "text-white font-bold"
-                      : disabled
-                        ? "text-ink-200"
-                        : "text-ink-800",
-                  )}
-                >
-                  {d.getDate()}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        </Pressable>
       ))}
     </View>
+  );
+}
+
+function WriteReviewSheet({
+  listing,
+  visible,
+  onClose,
+  onSubmit,
+  onSubmitted,
+}: {
+  listing: Listing;
+  visible: boolean;
+  onClose: () => void;
+  onSubmit: {
+    mutateAsync: (payload: {
+      listing_id: string;
+      rating: number;
+      title: string;
+      comment: string;
+      photos?: string[];
+    }) => Promise<Review>;
+  };
+  onSubmitted: (review: Review) => void;
+}) {
+  const [rating, setRating] = useState(5);
+  const [title, setTitle] = useState("");
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const canSubmit = comment.trim().length > 0;
+
+  async function submit() {
+    if (!canSubmit || submitting) return;
+    setSubmitting(true);
+    try {
+      const review = await onSubmit.mutateAsync({
+        listing_id: listing.id,
+        rating,
+        title: title.trim(),
+        comment: comment.trim(),
+      });
+      onSubmitted(review);
+    } catch {
+      Alert.alert(
+        "Could not submit review",
+        "Something went wrong. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Sheet
+      visible={visible}
+      title="Share Your Experience"
+      onClose={onClose}
+      footer={
+        <View className="gap-3">
+          <Button
+            title={submitting ? "Submitting..." : "Submit Review"}
+            size="lg"
+            block
+            loading={submitting}
+            disabled={!canSubmit}
+            onPress={() => void submit()}
+          />
+        </View>
+      }
+    >
+      <Text className="text-xs text-ink-500 mb-4">
+        Share your experience at <Text className="font-semibold text-ink-800">{listing.title}</Text>
+      </Text>
+
+      <Text className="text-sm font-semibold text-ink-900 mb-1.5">Your Rating</Text>
+      <View className="mb-4">
+        <StarPicker value={rating} onChange={setRating} />
+      </View>
+
+      <Text className="text-sm font-semibold text-ink-900 mb-1.5">Review Title</Text>
+      <TextInput
+        value={title}
+        onChangeText={setTitle}
+        placeholder="e.g. 'Amazing sunset cruise!'"
+        placeholderTextColor="#848d9c"
+        className="bg-white border border-ink-200 rounded-xl px-4 py-3 text-base text-ink-900 mb-4"
+      />
+
+      <Text className="text-sm font-semibold text-ink-900 mb-1.5">Your Review</Text>
+      <TextInput
+        value={comment}
+        onChangeText={setComment}
+        placeholder="Tell travelers about your experience..."
+        placeholderTextColor="#848d9c"
+        multiline
+        numberOfLines={5}
+        className="bg-white border border-ink-200 rounded-xl px-4 py-3 text-base text-ink-900"
+        textAlignVertical="top"
+      />
+    </Sheet>
   );
 }

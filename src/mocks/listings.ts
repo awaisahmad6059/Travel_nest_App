@@ -602,6 +602,18 @@ export const TRENDING_IDS = MOCK_LISTINGS.filter((l) => l.isTrending).map((l) =>
 /** Deals shown on the Home feed. */
 export const DEAL_IDS = MOCK_LISTINGS.filter((l) => l.isDeal).map((l) => l.id);
 
+/** Destinations shown in the Home Destinations grid (mock stand-in for /listings/destinations). */
+export const MOCK_DESTINATIONS_FEATURED = [
+  { name: "Lahore", country: "Pakistan" },
+  { name: "Karachi", country: "Pakistan" },
+  { name: "Bali", country: "Indonesia" },
+  { name: "Tokyo", country: "Japan" },
+  { name: "Paris", country: "France" },
+  { name: "Dubai", country: "UAE" },
+  { name: "Rome", country: "Italy" },
+  { name: "Skardu", country: "Pakistan" },
+];
+
 /** Destinations suggested in the search autocomplete. */
 export const MOCK_DESTINATIONS = [
   "Tokyo, Japan",

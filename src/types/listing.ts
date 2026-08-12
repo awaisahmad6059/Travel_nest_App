@@ -59,6 +59,7 @@ export interface ItineraryStep {
 export interface ReviewSummary {
   pros: string[];
   cons: string[];
+  sentimentScore?: number;
 }
 
 export interface Listing {
@@ -81,6 +82,7 @@ export interface Listing {
   includes: string[];
   excludes: string[];
   itinerary: ItineraryStep[];
+  knowBeforeYouGo?: string[];
   meetingPoint?: GeoPoint;
   options: ListingOption[];
   freeCancellation: boolean;

@@ -1,5 +1,4 @@
 import { USE_MOCKS_AVAILABILITY } from "@/config";
-import { isPastDate, dayKey } from "@/utils/dateUtils";
 import { request, mockDelay } from "./client";
 import {
   Hold,
@@ -10,75 +9,12 @@ import {
   slotDtoToSlot,
 } from "./contracts";
 
-function hashCode(str: string): number {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
-const DEMO_PATTERNS: number[][][] = [
-  [
-    [9, 0],
-    [13, 0],
-    [17, 0],
-  ],
-  [[9, 0]],
-  [
-    [10, 0],
-    [16, 0],
-  ],
-];
-
-function buildDemoSlots(listingId: string, dates: string[]): Slot[] {
-  const seed = hashCode(listingId);
-  const times = DEMO_PATTERNS[seed % 3];
-  const slots: Slot[] = [];
-  dates.forEach((iso, i) => {
-    const day = new Date(iso);
-    day.setHours(0, 0, 0, 0);
-    times.forEach(([h, m], ti) => {
-      const start = new Date(day);
-      start.setHours(h, m, 0, 0);
-      const end = new Date(start);
-      end.setHours(end.getHours() + 2);
-      const key = seed + i * 3 + ti;
-      const remaining = (key * 13 + seed) % 20;
-      slots.push({
-        id: `demo-${listingId}-${dayKey(start.toISOString())}-${ti}`,
-        listingId,
-        startTime: start.toISOString(),
-        endTime: end.toISOString(),
-        totalCapacity: 20,
-        bookedCapacity: Math.max(0, 20 - remaining),
-        heldCapacity: 0,
-        remaining,
-      });
-    });
-  });
-  return slots;
-}
-
-// TEMP: remove once the backend seed data has future-dated slots. The deployed
-// seed only contains past dates (e.g. 2026-08-05/06), so this generates demo
-// slots across the rolling 7-day window to keep the demo fully bookable.
-function demoSlotsFor(listingId: string): Slot[] {
-  const dates: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const day = new Date();
-    day.setHours(0, 0, 0, 0);
-    day.setDate(day.getDate() + i);
-    dates.push(day.toISOString());
-  }
-  return buildDemoSlots(listingId, dates);
-}
-
 /**
  * Availability & inventory hold service (API_HANDOFF.md §4.2).
  *
- * The hold step must NOT be skipped during checkout — inventory locking
- * depends on it (same as the website). Holds expire after ~900s (15 min).
+ * Only real backend slots are returned — no demo/placeholder dates. The hold
+ * step must NOT be skipped during checkout — inventory locking depends on it
+ * (same as the website). Holds expire after ~900s (15 min).
  */
 export const availabilityApi = {
   async getSlots(listingId: string): Promise<Slot[]> {
@@ -88,19 +24,7 @@ export const availabilityApi = {
     const dtos = await request<SlotDTO[]>(
       `/availability/slots/${encodeURIComponent(listingId)}`,
     );
-    const real = dtos.map(slotDtoToSlot);
-    const hasBookable = real.some((s) => !isPastDate(s.startTime));
-    if (hasBookable) return real;
-    // TEMP: see demoSlotsFor — backend seed has no future-dated slots yet.
-    return mockDelay(demoSlotsFor(listingId), 250);
-  },
-
-  /**
-   * TEMP: demo slots for a single future date picked via the calendar
-   * ("More dates"), mirroring the rolling-window demo slot pattern.
-   */
-  demoSlotsForDate(listingId: string, isoDate: string): Slot[] {
-    return buildDemoSlots(listingId, [isoDate]);
+    return dtos.map(slotDtoToSlot);
   },
 
   async hold(req: HoldRequest): Promise<Hold> {
@@ -108,17 +32,6 @@ export const availabilityApi = {
       return mockDelay(
         {
           holdId: `hold_mock_${Date.now()}`,
-          expiresAt: Date.now() + 900_000,
-        },
-        400,
-      );
-    }
-    // TEMP: "demo-" slots are generated client-side (see demoSlotsFor) and
-    // don't exist on the backend, so their holds are faked too.
-    if (req.slot_id.startsWith("demo-")) {
-      return mockDelay(
-        {
-          holdId: `hold_demo_${Date.now()}`,
           expiresAt: Date.now() + 900_000,
         },
         400,

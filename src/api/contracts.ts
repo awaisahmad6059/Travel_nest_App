@@ -21,6 +21,7 @@ import type {
   Payout,
   PayoutSummary,
   Price,
+  Review,
   ReviewSummary,
   User,
 } from "@/types";
@@ -87,6 +88,7 @@ export interface ListingDTO {
   inclusions?: string[];
   exclusions?: string[];
   itinerary?: ListingItineraryDTO[];
+  know_before_you_go?: string[];
   review_count?: number;
   free_cancellation?: boolean;
   instant_confirmation?: boolean;
@@ -225,6 +227,37 @@ export interface PersonalizedRecommendationsDTO {
 export interface ReviewSummaryDTO {
   pros: string[];
   cons: string[];
+  sentiment_score?: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reviews (real backend — §4.x / §5.2)                               */
+/* ------------------------------------------------------------------ */
+
+export interface ReviewDTO {
+  id: string;
+  booking_id?: string;
+  user_id?: string;
+  user_name?: string;
+  user_avatar?: string;
+  listing_id?: string;
+  rating?: number;
+  title?: string;
+  comment?: string;
+  photos?: string[];
+  helpful_count?: number;
+  ai_fraud_score?: number;
+  status?: string;
+  created_at?: string;
+  supplier_reply?: { text?: string } | null;
+}
+
+export interface CreateReviewRequest {
+  listing_id: string;
+  rating: number;
+  title?: string;
+  comment: string;
+  photos?: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -373,6 +406,7 @@ export function listingDtoToListing(dto: ListingDTO): Listing {
       title: s.title,
       description: s.description,
     })),
+    knowBeforeYouGo: dto.know_before_you_go ?? [],
     meetingPoint: dto.meeting_point
       ? {
           latitude: dto.meeting_point.latitude,
@@ -396,7 +430,11 @@ export function listingDtoToListing(dto: ListingDTO): Listing {
     isDeal: dto.is_deal ?? false,
     recommendedFor: dto.recommended_for ?? [],
     reviewSummary: dto.ai_review_summary
-      ? { pros: dto.ai_review_summary.pros ?? [], cons: dto.ai_review_summary.cons ?? [] }
+      ? {
+          pros: dto.ai_review_summary.pros ?? [],
+          cons: dto.ai_review_summary.cons ?? [],
+          sentimentScore: dto.ai_review_summary.sentiment_score,
+        }
       : undefined,
   };
 }
@@ -508,5 +546,23 @@ export function reviewSummaryDto(dto: ReviewSummaryDTO): ReviewSummary {
   return {
     pros: dto.pros ?? [],
     cons: dto.cons ?? [],
+    sentimentScore: dto.sentiment_score,
+  };
+}
+
+export function reviewDtoToReview(dto: ReviewDTO): Review {
+  return {
+    id: dto.id,
+    listingId: dto.listing_id ?? "",
+    authorName: dto.user_name ?? "Traveler",
+    authorEmoji: "",
+    avatarUrl: dto.user_avatar,
+    rating: dto.rating ?? 0,
+    title: dto.title ?? "",
+    comment: dto.comment ?? "",
+    photos: dto.photos ?? [],
+    helpfulCount: dto.helpful_count ?? 0,
+    date: dto.created_at ?? new Date().toISOString(),
+    supplierReply: dto.supplier_reply?.text,
   };
 }
