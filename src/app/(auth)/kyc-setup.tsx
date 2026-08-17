@@ -1,0 +1,375 @@
+import { useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+
+import { SafeAreaView } from "@/components/ui/SafeAreaView";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { supabase } from "@/lib/supabase";
+import { useSession } from "@/auth/sessionStore";
+import { cn } from "@/utils/cn";
+
+type BusinessType = "solo" | "company" | null;
+
+const CURRENCIES = ["USD", "EUR", "GBP", "PKR", "AED", "JPY", "SAR", "TRY"];
+
+function SectionTitle({ icon, title }: { icon: string; title: string }) {
+  return (
+    <View className="flex-row items-center gap-2 mb-1">
+      <Ionicons name={icon as any} size={18} color="#7c3aed" />
+      <Text className="text-sm font-extrabold text-ink-900">{title}</Text>
+    </View>
+  );
+}
+
+function FilePicker({
+  label,
+  file,
+  onPick,
+}: {
+  label: string;
+  file: string | null;
+  onPick: (uri: string | null) => void;
+}) {
+  async function pick() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to upload documents.");
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!res.canceled && res.assets[0]) onPick(res.assets[0].uri);
+  }
+
+  return (
+    <View>
+      <Text className="text-xs font-bold text-ink-500 mb-1">{label}</Text>
+      {file ? (
+        <View className="flex-row items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
+          <Ionicons name="document-attach-outline" size={18} color="#7c3aed" />
+          <Text className="text-sm text-violet-700 flex-1" numberOfLines={1}>
+            {file.split("/").pop()}
+          </Text>
+          <Pressable onPress={() => onPick(null)}>
+            <Ionicons name="close-circle" size={20} color="#ef4444" />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          onPress={pick}
+          className="border-2 border-dashed border-ink-200 rounded-xl px-4 py-4 items-center"
+        >
+          <Ionicons name="cloud-upload-outline" size={24} color="#7c3aed" />
+          <Text className="text-xs text-ink-500 mt-1">Tap to upload</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+export default function KycSetupScreen() {
+  const router = useRouter();
+  const { user } = useSession();
+  const [step, setStep] = useState<2 | 3>(2);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Step 2
+  const [businessType, setBusinessType] = useState<BusinessType>(null);
+
+  // Step 3a - Solo
+  const [soloLocation, setSoloLocation] = useState("");
+  const [soloPhone, setSoloPhone] = useState("");
+  const [soloCnic, setSoloCnic] = useState("");
+  const [soloTaxId, setSoloTaxId] = useState("");
+  const [soloCurrency, setSoloCurrency] = useState(CURRENCIES[0]);
+  const [soloCurrencyOpen, setSoloCurrencyOpen] = useState(false);
+  const [soloIdFile, setSoloIdFile] = useState<string | null>(null);
+
+  // Step 3b - Company
+  const [companyName, setCompanyName] = useState("");
+  const [companyLocation, setCompanyLocation] = useState("");
+  const [companyEmail, setCompanyEmail] = useState("");
+  const [companyPhone, setCompanyPhone] = useState("");
+  const [companyRegNo, setCompanyRegNo] = useState("");
+  const [companyTaxId, setCompanyTaxId] = useState("");
+  const [companyRegDoc, setCompanyRegDoc] = useState<string | null>(null);
+  const [companyInsDoc, setCompanyInsDoc] = useState<string | null>(null);
+
+  // Step 3b - Lead rep
+  const [leadName, setLeadName] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadCurrency, setLeadCurrency] = useState(CURRENCIES[0]);
+  const [leadCurrencyOpen, setLeadCurrencyOpen] = useState(false);
+  const [leadIdFile, setLeadIdFile] = useState<string | null>(null);
+
+  function goNext() {
+    setError(null);
+    if (!businessType) return setError("Please select your business type.");
+    setStep(3);
+  }
+
+  async function handleSubmit() {
+    setError(null);
+    if (businessType === "solo") {
+      if (!soloLocation.trim()) return setError("Please enter your location.");
+      if (!soloPhone.trim()) return setError("Please enter your phone number.");
+      if (!soloCnic.trim()) return setError("Please enter your CNIC/Passport number.");
+    } else {
+      if (!companyName.trim()) return setError("Please enter your company name.");
+      if (!companyLocation.trim()) return setError("Please enter company location.");
+      if (!companyEmail.trim()) return setError("Please enter company email.");
+      if (!leadName.trim()) return setError("Please enter lead operator name.");
+      if (!leadPhone.trim()) return setError("Please enter lead operator phone.");
+    }
+
+    if (!user?.id) return setError("Not logged in. Please sign in again.");
+
+    setLoading(true);
+    try {
+      if (businessType === "solo" && soloIdFile) {
+        await uploadKycDocument(user.id, soloIdFile, "CNIC");
+      }
+      if (businessType === "company") {
+        if (companyRegDoc) await uploadKycDocument(user.id, companyRegDoc, "BUSINESS_LICENSE");
+        if (companyInsDoc) await uploadKycDocument(user.id, companyInsDoc, "BUSINESS_LICENSE");
+        if (leadIdFile) await uploadKycDocument(user.id, leadIdFile, "CNIC");
+      }
+
+      Alert.alert("Verification Submitted", "Your KYC documents have been submitted for review.", [
+        { text: "OK", onPress: () => router.replace("/pending-approval") },
+      ]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Submission failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function uploadKycDocument(userId: string, fileUri: string, docType: string) {
+    const ext = fileUri.split(".").pop() || "jpg";
+    const filePath = `${userId}/${Date.now()}-${docType.toLowerCase()}.${ext}`;
+
+    const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const binaryStr = atob(fileBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    const { error: storageError } = await supabase.storage
+      .from("kyc-documents")
+      .upload(filePath, bytes, { contentType: `image/${ext === "jpg" ? "jpeg" : ext}` });
+    if (storageError) throw storageError;
+
+    const { error: dbError } = await supabase.from("kyc_documents").insert({
+      supplier_id: userId,
+      document_type: docType,
+      file_path: filePath,
+      status: "PENDING",
+    });
+    if (dbError) throw dbError;
+  }
+
+  function renderStepIndicator() {
+    return (
+      <View className="flex-row items-center justify-center gap-2 mb-6">
+        <View style={{ height: 6, width: 36, borderRadius: 100, backgroundColor: "#16a34a" }} />
+        <View style={{ height: 6, width: step >= 3 ? 36 : 16, borderRadius: 100, backgroundColor: step >= 3 ? "#7c3aed" : "#e2e8f0" }} />
+        <View style={{ height: 6, width: step >= 3 ? 36 : 16, borderRadius: 100, backgroundColor: step >= 3 ? "#7c3aed" : "#e2e8f0" }} />
+      </View>
+    );
+  }
+
+  function renderCurrencyDropdown(
+    open: boolean,
+    setOpen: (v: boolean) => void,
+    value: string,
+    setValue: (v: string) => void,
+  ) {
+    return (
+      <View>
+        <Pressable
+          onPress={() => setOpen(!open)}
+          style={{ borderColor: "#cbd5e1" }}
+          className="bg-white border rounded-xl px-4 py-3 flex-row items-center justify-between"
+        >
+          <Text className="text-base text-ink-900">{value}</Text>
+          <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color="#64748b" />
+        </Pressable>
+        {open ? (
+          <View style={{ borderColor: "#cbd5e1" }} className="border border-ink-200 rounded-xl mt-1 bg-white overflow-hidden">
+            {CURRENCIES.map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => { setValue(c); setOpen(false); }}
+                style={{ borderBottomColor: "#f1f5f9", backgroundColor: value === c ? "#f5f3ff" : "#ffffff" }}
+                className="px-4 py-3 border-b border-ink-100"
+              >
+                <Text className={cn("text-sm", value === c ? "font-bold" : "text-ink-700")} style={{ color: value === c ? "#6d28d9" : undefined }}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
+  /* ─── Step 2: Business Type ─── */
+  if (step === 2) {
+    return (
+      <SafeAreaView className="flex-1 bg-surface-100">
+        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerClassName="flex-1 justify-center px-6 py-10">
+            <View className="bg-white rounded-3xl p-8 shadow-sm">
+              {renderStepIndicator()}
+              <View className="flex-row items-center justify-center gap-1.5 mb-3">
+                <View style={{ backgroundColor: "#ede9fe" }} className="rounded-full px-3 py-1.5 flex-row items-center gap-1.5">
+                  <Ionicons name="shield-checkmark" size={14} color="#7c3aed" />
+                  <Text style={{ color: "#6d28d9" }} className="text-xs font-bold">Complete Your Profile</Text>
+                </View>
+              </View>
+              <Text className="text-2xl font-extrabold text-ink-900 text-center">Business Structure</Text>
+              <Text className="text-sm text-ink-500 text-center mt-1 mb-6">Select the type that best describes your business</Text>
+
+              <View className="gap-3">
+                <Pressable
+                  onPress={() => setBusinessType("solo")}
+                  style={{ borderColor: businessType === "solo" ? "#8b5cf6" : "#e2e8f0", backgroundColor: businessType === "solo" ? "#f5f3ff" : "#ffffff" }}
+                  className="rounded-2xl border-2 p-5"
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View style={{ backgroundColor: businessType === "solo" ? "#ede9fe" : "#f1f5f9" }} className="h-12 w-12 rounded-xl items-center justify-center">
+                      <Text className="text-2xl">{"\uD83D\uDC64"}</Text>
+                    </View>
+                    <View className="flex-1">
+                      <Text style={{ color: businessType === "solo" ? "#6d28d9" : "#0f172a" }} className="text-base font-bold">Solo Operator / Individual Guide</Text>
+                      <Text className="text-xs text-ink-500 mt-0.5">I operate as an individual tour guide or freelancer</Text>
+                    </View>
+                    <Ionicons name={businessType === "solo" ? "radio-button-on" : "radio-button-off"} size={22} color={businessType === "solo" ? "#7c3aed" : "#cbd5e1"} />
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setBusinessType("company")}
+                  style={{ borderColor: businessType === "company" ? "#8b5cf6" : "#e2e8f0", backgroundColor: businessType === "company" ? "#f5f3ff" : "#ffffff" }}
+                  className="rounded-2xl border-2 p-5"
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View style={{ backgroundColor: businessType === "company" ? "#ede9fe" : "#f1f5f9" }} className="h-12 w-12 rounded-xl items-center justify-center">
+                      <Text className="text-2xl">{"\uD83C\uDFE2"}</Text>
+                    </View>
+                    <View className="flex-1">
+                      <Text style={{ color: businessType === "company" ? "#6d28d9" : "#0f172a" }} className="text-base font-bold">Registered Travel Company</Text>
+                      <Text className="text-xs text-ink-500 mt-0.5">I represent a registered business or travel agency</Text>
+                    </View>
+                    <Ionicons name={businessType === "company" ? "radio-button-on" : "radio-button-off"} size={22} color={businessType === "company" ? "#7c3aed" : "#cbd5e1"} />
+                  </View>
+                </Pressable>
+              </View>
+
+              {error ? (
+                <View className="bg-danger-50 rounded-xl px-4 py-3 mt-4">
+                  <Text className="text-sm text-danger-600">{error}</Text>
+                </View>
+              ) : null}
+
+              <Button title="Continue" size="lg" block disabled={!businessType} onPress={goNext} className="mt-6" />
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  /* ─── Step 3: KYC Details ─── */
+  return (
+    <SafeAreaView className="flex-1 bg-surface-100">
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerClassName="px-6 py-8" keyboardShouldPersistTaps="handled">
+          <Pressable onPress={() => setStep(2)} className="mb-4 flex-row items-center gap-1">
+            <Ionicons name="chevron-back" size={20} color="#0a54d9" />
+            <Text className="text-sm font-medium text-brand-600">Back</Text>
+          </Pressable>
+
+          <View className="bg-white rounded-3xl p-6 shadow-sm mb-6">
+            {renderStepIndicator()}
+            <Text className="text-xl font-extrabold text-ink-900 text-center">
+              {businessType === "solo" ? "Verification Details" : "Company & Verification Details"}
+            </Text>
+            <Text className="text-xs text-ink-500 text-center mt-1">Please provide your information and required verification documents.</Text>
+          </View>
+
+          {businessType === "solo" ? (
+            <View className="bg-white rounded-3xl p-6 shadow-sm gap-4">
+              <SectionTitle icon="person" title="Personal Information" />
+              <View><Text className="text-xs font-bold text-ink-500 mb-1">Location (City, Country)</Text><Input value={soloLocation} onChangeText={setSoloLocation} placeholder="e.g. Lahore, Pakistan" /></View>
+              <View><Text className="text-xs font-bold text-ink-500 mb-1">Mobile Phone</Text><Input value={soloPhone} onChangeText={setSoloPhone} placeholder="+92 300 1234567" keyboardType="phone-pad" /></View>
+              <View className="h-px bg-ink-100 my-1" />
+              <SectionTitle icon="document-text" title="Identification" />
+              <View><Text className="text-xs font-bold text-ink-500 mb-1">CNIC / Passport Number</Text><Input value={soloCnic} onChangeText={setSoloCnic} placeholder="e.g. 35202-1234567-1" /></View>
+              <View><Text className="text-xs font-bold text-ink-500 mb-1">Tax ID / NTN</Text><Input value={soloTaxId} onChangeText={setSoloTaxId} placeholder="Tax Registration Number" /></View>
+              <View className="h-px bg-ink-100 my-1" />
+              <SectionTitle icon="wallet" title="Payout & Documents" />
+              <View>
+                <Text className="text-xs font-bold text-ink-500 mb-1">Preferred Payout Currency</Text>
+                {renderCurrencyDropdown(soloCurrencyOpen, setSoloCurrencyOpen, soloCurrency, setSoloCurrency)}
+              </View>
+              <FilePicker label="ID Card Document (CNIC/Passport)" file={soloIdFile} onPick={setSoloIdFile} />
+            </View>
+          ) : (
+            <View className="gap-4">
+              <View className="bg-white rounded-3xl p-6 shadow-sm gap-4">
+                <SectionTitle icon="business" title="Company Information" />
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Company Name *</Text><Input value={companyName} onChangeText={setCompanyName} placeholder="e.g. TravelNest Voyages" /></View>
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Company Location *</Text><Input value={companyLocation} onChangeText={setCompanyLocation} placeholder="e.g. Lahore, Pakistan" /></View>
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Company Email *</Text><Input value={companyEmail} onChangeText={setCompanyEmail} placeholder="contact@company.com" keyboardType="email-address" autoCapitalize="none" /></View>
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Company Contact Number *</Text><Input value={companyPhone} onChangeText={setCompanyPhone} placeholder="+92 42 35789000" keyboardType="phone-pad" /></View>
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Company Registration # *</Text><Input value={companyRegNo} onChangeText={setCompanyRegNo} placeholder="Business Reg Number" /></View>
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Corporate Tax ID / NTN *</Text><Input value={companyTaxId} onChangeText={setCompanyTaxId} placeholder="Tax Registration Number" /></View>
+                <FilePicker label="Company Registration Doc *" file={companyRegDoc} onPick={setCompanyRegDoc} />
+                <FilePicker label="Company Insurance Doc *" file={companyInsDoc} onPick={setCompanyInsDoc} />
+              </View>
+
+              <View className="bg-white rounded-3xl p-6 shadow-sm gap-4">
+                <SectionTitle icon="person" title="Lead Representative Information" />
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Lead Operator Name *</Text><Input value={leadName} onChangeText={setLeadName} placeholder="Full Name" /></View>
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Lead Operator Email *</Text><Input value={leadEmail} onChangeText={setLeadEmail} placeholder="Email Address" keyboardType="email-address" autoCapitalize="none" /></View>
+                <View><Text className="text-xs font-bold text-ink-500 mb-1">Lead Operator Phone *</Text><Input value={leadPhone} onChangeText={setLeadPhone} placeholder="+92 300 1234567" keyboardType="phone-pad" /></View>
+                <View>
+                  <Text className="text-xs font-bold text-ink-500 mb-1">Payout Currency *</Text>
+                  {renderCurrencyDropdown(leadCurrencyOpen, setLeadCurrencyOpen, leadCurrency, setLeadCurrency)}
+                </View>
+                <FilePicker label="Lead Operator ID Card (CNIC / Passport) *" file={leadIdFile} onPick={setLeadIdFile} />
+              </View>
+            </View>
+          )}
+
+          {error ? (
+            <View className="bg-danger-50 rounded-xl px-4 py-3 mt-4">
+              <Text className="text-sm text-danger-600">{error}</Text>
+            </View>
+          ) : null}
+
+          <Button title="Submit Verification" size="lg" block loading={loading} disabled={loading} onPress={handleSubmit} className="mt-6 mb-8" />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}

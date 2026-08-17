@@ -18,9 +18,9 @@ import type { Booking, BookingStatus, CreateBookingInput, Price } from "@/types"
  * Checkout uses the documented request shape:
  *   POST /bookings  { hold_id, lead_name, lead_email, lead_phone,
  *                     special_requirements, payment_token }
- * The booking response carries `qr_voucher_code` which is cached offline
+ * The booking response carries `booking_reference` which is cached offline
  * (voucherCache) so My Bookings works without a connection and the voucher
- * QR stays viewable offline (SRS requirement).
+ * stays viewable offline (SRS requirement).
  *
  * In mock mode bookings live in an in-memory store seeded from MOCK_BOOKINGS,
  * so bookings created during the session are also retrievable by id.
@@ -41,7 +41,7 @@ function bookingDtoToCachedVoucher(dto: BookingDTO): CachedVoucher {
   return {
     bookingId: dto.id,
     bookingRef: dto.booking_reference,
-    qrVoucherCode: dto.qr_voucher_code,
+    voucherCode: dto.qr_voucher_code,
     listingId: dto.listing_id,
     listingSlug: dto.listing_slug,
     listingTitle: dto.listing_title ?? dto.listing_id,
@@ -87,8 +87,7 @@ function cachedVoucherToBooking(v: CachedVoucher): Booking {
     activityDate: v.activityDate,
     travelers: v.travelers,
     total,
-    voucherCode: v.qrVoucherCode,
-    qrToken: v.qrVoucherCode,
+    voucherCode: v.voucherCode,
     supplierId: v.supplierId ?? "",
     supplierName: v.supplierName,
   };
@@ -137,7 +136,6 @@ export const bookingApi = {
         travelers: input.travelers,
         total: input.total,
         voucherCode: `TNV-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`,
-        qrToken: `QR:${Math.random().toString(36).slice(2, 10)}`,
         supplierId: "sup_1",
         supplierName: "Summit Adventures Co.",
       };
@@ -154,7 +152,7 @@ export const bookingApi = {
       const voucher: CachedVoucher = {
         bookingId: `bk_demo_${Date.now()}`,
         bookingRef: `TN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-        qrVoucherCode: `TNV-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`,
+        voucherCode: `TNV-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`,
         listingId: item.listingId,
         listingSlug: item.listingSlug,
         listingTitle: item.title,

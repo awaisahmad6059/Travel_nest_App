@@ -47,7 +47,7 @@ export default function SupplierDashboardScreen() {
         ) : (
           <View className="flex-row flex-wrap gap-3">
             <StatCard label="Today's bookings" value={String(data.stats.todayBookings)} icon="today-outline" tone="brand" />
-            <StatCard label="Upcoming check-ins" value={String(data.stats.upcomingCheckIns)} icon="scan-outline" tone="accent" />
+            <StatCard label="Upcoming check-ins" value={String(data.stats.upcomingCheckIns)} icon="key-outline" tone="accent" />
             <StatCard label="Pending confirmations" value={String(data.stats.pendingConfirmations)} icon="time-outline" tone="warning" />
             <StatCard label="Revenue this month" value={formatPrice(data.stats.monthRevenue)} icon="cash-outline" tone="success" />
             <StatCard label="Average rating" value={data.stats.averageRating.toFixed(1)} icon="star-outline" tone="neutral" />

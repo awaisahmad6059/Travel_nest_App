@@ -40,8 +40,6 @@ export interface Booking {
   travelers: Traveler[];
   total: Price;
   voucherCode: string;
-  /** Mock QR payload — rendered as a placeholder grid until real QR service is available. */
-  qrToken: string;
   supplierId: string;
   supplierName?: string;
 }

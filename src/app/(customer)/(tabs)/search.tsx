@@ -223,7 +223,7 @@ export default function SearchScreen() {
                   ["rating", "Top rated"],
                   ["price-asc", "Price: low → high"],
                   ["price-desc", "Price: high → low"],
-                ] as Array<[SearchSort, string]>
+                ] as [SearchSort, string][]
               ).map(([value, label]) => (
                 <Chip
                   key={value}
@@ -244,7 +244,7 @@ export default function SearchScreen() {
                   ["Under $80", undefined, 80],
                   ["$80–$150", 80, 150],
                   ["Over $150", 150, undefined],
-                ] as Array<[string, number | undefined, number | undefined]>
+                ] as [string, number | undefined, number | undefined][]
               ).map(([label, min, max]) => {
                 const active = draft.minPrice === min && draft.maxPrice === max;
                 return (
@@ -269,7 +269,7 @@ export default function SearchScreen() {
                   ["Any", undefined],
                   ["4.5★", 4.5],
                   ["4.0★", 4.0],
-                ] as Array<[string, number | undefined]>
+                ] as [string, number | undefined][]
               ).map(([label, rating]) => (
                 <Chip
                   key={label}

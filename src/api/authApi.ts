@@ -1,39 +1,27 @@
 import { USE_MOCKS_AUTH } from "@/config";
-import { request, mockDelay } from "./client";
+import { mockDelay } from "./client";
 import { DEMO_ACCOUNTS } from "@/mocks/users";
-import { userDtoToUser, UserDTO } from "./contracts";
+import { supabase } from "@/lib/supabase";
 import type { AuthSession, SignInInput, SignUpInput, User } from "@/types";
 
 /**
- * Auth service (API_HANDOFF.md §5.1 — planned). Today it resolves mock
- * sessions; the real branches follow the planned routes:
- *   POST /auth/login | POST /auth/register | POST /auth/refresh | GET /users/me
- *
- * Demo accounts (any password works):
- *   customer@demo.com -> Customer Panel
- *   supplier@demo.com -> Supplier Panel
+ * Auth service — mocks for demo, Supabase Auth for real login.
  */
 
-interface AuthResponseDTO {
-  access_token: string;
-  refresh_token: string;
-  user?: UserDTO;
-}
-
-function toSession(dto: AuthResponseDTO, fallbackRole: "customer" | "supplier"): AuthSession {
-  const user: User = dto.user
-    ? userDtoToUser(dto.user)
-    : {
-        id: "me",
-        name: "Traveler",
-        email: "",
-        role: fallbackRole,
-        avatarEmoji: fallbackRole === "supplier" ? "🏔️" : "🧳",
-      };
+function supabaseUserToUser(su: {
+  id: string;
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+}): User {
+  const meta = su.user_metadata ?? {};
+  const role: User["role"] =
+    (meta.role as User["role"]) ?? "customer";
   return {
-    accessToken: dto.access_token,
-    refreshToken: dto.refresh_token,
-    user,
+    id: su.id,
+    name: (meta.full_name as string) ?? (meta.name as string) ?? "User",
+    email: su.email ?? "",
+    role,
+    avatarEmoji: role === "supplier" ? "🏔️" : "🧳",
   };
 }
 
@@ -54,11 +42,20 @@ export const authApi = {
         user,
       });
     }
-    const dto = await request<AuthResponseDTO>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email: input.email, password: input.password }),
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: input.email.trim(),
+      password: input.password,
     });
-    return toSession(dto, "customer");
+    if (error) throw new Error(error.message);
+    if (!data.user || !data.session) throw new Error("Login failed.");
+
+    const user = supabaseUserToUser(data.user);
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      user,
+    };
   },
 
   async signUp(input: SignUpInput): Promise<AuthSession> {
@@ -75,48 +72,87 @@ export const authApi = {
         },
       });
     }
-    const dto = await request<AuthResponseDTO>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({
-        name: input.name,
-        email: input.email,
-        password: input.password,
-        role: input.role,
-      }),
+
+    const { data, error } = await supabase.auth.signUp({
+      email: input.email.trim(),
+      password: input.password,
+      options: {
+        data: { full_name: input.name, role: input.role },
+      },
     });
-    return toSession(dto, input.role);
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error("Sign up failed.");
+
+    const user: User = {
+      id: data.user.id,
+      name: input.name,
+      email: input.email,
+      role: input.role,
+      avatarEmoji: input.role === "supplier" ? "🏔️" : "🧳",
+    };
+
+    if (data.session) {
+      return {
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        user,
+      };
+    }
+
+    return {
+      accessToken: "",
+      refreshToken: "",
+      user,
+    };
   },
 
-  /** Rotates an expired access token using the refresh token. */
   async refresh(refreshToken: string): Promise<AuthSession> {
-    const dto = await request<AuthResponseDTO>("/auth/refresh", {
-      method: "POST",
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    return toSession(dto, "customer");
+    if (USE_MOCKS_AUTH) {
+      return mockDelay({
+        accessToken: "mock-access-refreshed",
+        refreshToken: "mock-refresh-new",
+        user: DEMO_ACCOUNTS[0],
+      });
+    }
+
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) throw new Error(error.message);
+    if (!data.user || !data.session) throw new Error("Session refresh failed.");
+
+    const user = supabaseUserToUser(data.user);
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      user,
+    };
   },
 
-  /** Fetches the current profile — called with the stored access token. */
   async getMe(): Promise<User> {
-    const dto = await request<UserDTO>("/users/me");
-    return userDtoToUser(dto);
+    if (USE_MOCKS_AUTH) {
+      return DEMO_ACCOUNTS[0];
+    }
+
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error("Not authenticated.");
+
+    return supabaseUserToUser(data.user);
   },
 
   async signOut(): Promise<void> {
     if (USE_MOCKS_AUTH) {
       return mockDelay(undefined, 200);
     }
-    // No logout route in the handoff — tokens are dropped client-side.
-    return Promise.resolve();
+    await supabase.auth.signOut();
   },
 
   async requestPasswordReset(email: string): Promise<void> {
     if (USE_MOCKS_AUTH) {
       return mockDelay(undefined, 600);
     }
-    await request("/auth/forgot-password", {
-      method: "POST",
-      body: JSON.stringify({ email }),
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: "travelnest://reset-password",
     });
+    if (error) throw new Error(error.message);
   },
 };

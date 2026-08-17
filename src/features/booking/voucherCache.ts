@@ -4,8 +4,8 @@ import type { BookingStatus, Thumbnail, Traveler } from "@/types";
 /**
  * Offline voucher cache (API_HANDOFF.md §4.3).
  *
- * After a successful checkout we cache `booking_reference`, `qr_voucher_code`
- * and the traveler/slot fields locally so "My Bookings" renders vouchers with
+ * After a successful checkout we cache `booking_reference` and the
+ * traveler/slot fields locally so "My Bookings" renders vouchers with
  * no network connection (SRS requirement). The real My-Bookings list endpoint
  * is not built yet (§5.2), so this cache doubles as the online list source for
  * bookings created from the app.
@@ -23,7 +23,7 @@ const ITEM_PREFIX = "travelnest.voucher.";
 export interface CachedVoucher {
   bookingId: string;
   bookingRef: string;
-  qrVoucherCode: string;
+  voucherCode: string;
   listingId: string;
   listingSlug?: string;
   listingTitle: string;

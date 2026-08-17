@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 
 import { useBooking } from "@/features/booking/useBookings";
 import { downloadBookingPdf } from "@/features/booking/voucherPdf";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { QRCodePlaceholder } from "@/components/QRCodePlaceholder";
 import type { Booking } from "@/types";
 import { cn } from "@/utils/cn";
 import { formatPrice } from "@/utils/format";
@@ -75,6 +75,13 @@ function VoucherCard({
   const item = booking.items[0];
   const lead = booking.travelers[0];
   const confirmed = booking.status === "confirmed";
+  const [copied, setCopied] = useState(false);
+
+  async function copyRef() {
+    await Clipboard.setStringAsync(booking.bookingRef);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
 
   return (
     <Pressable onPress={onPress} className="bg-surface-100 rounded-2xl border border-ink-100 p-5">
@@ -89,14 +96,27 @@ function VoucherCard({
             {lead?.phone ? ` (${lead.phone})` : ""}
           </Text>
         </View>
-        <View className="items-center bg-white rounded-xl border border-ink-200 p-2">
-          <QRCodePlaceholder
-            token={booking.qrToken}
-            size={88}
-            label={booking.voucherCode || booking.bookingRef}
-            labelClassName="text-[10px] font-extrabold text-brand-600 tracking-wide"
-          />
-        </View>
+        <Pressable
+          onPress={copyRef}
+          className="items-center bg-white rounded-xl border border-ink-200 px-4 py-3"
+        >
+          <Text className="text-[10px] text-ink-400 uppercase tracking-wider font-semibold mb-1">
+            Booking Reference
+          </Text>
+          <Text className="text-lg font-extrabold text-brand-600 tracking-wide">
+            {booking.bookingRef}
+          </Text>
+          <View className="flex-row items-center gap-1 mt-1">
+            <Ionicons
+              name={copied ? "checkmark-circle" : "copy-outline"}
+              size={14}
+              color={copied ? "#059669" : "#0a54d9"}
+            />
+            <Text className="text-[10px] font-semibold" style={{ color: copied ? "#059669" : "#0a54d9" }}>
+              {copied ? "Copied!" : "Tap to copy"}
+            </Text>
+          </View>
+        </Pressable>
       </View>
 
       <View className="flex-row flex-wrap justify-between">
@@ -189,8 +209,8 @@ export default function ConfirmationScreen() {
         </Text>
         <Text className="mt-2 mb-8 text-center text-sm text-ink-500 leading-6">
           {ids.length > 1
-            ? "Your electronic QR ticket vouchers have been dispatched. Each voucher is also saved to My Bookings and available offline."
-            : "Your electronic QR ticket voucher has been dispatched to your email and saved to My Bookings."}
+            ? "Your electronic vouchers have been dispatched. Each voucher is also saved to My Bookings and available offline."
+            : "Your electronic voucher has been dispatched to your email and saved to My Bookings."}
         </Text>
 
         {ids.length === 0 ? (

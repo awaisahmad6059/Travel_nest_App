@@ -25,7 +25,7 @@ const FAQS = [
   },
   {
     q: "How do I check in with my voucher?",
-    a: "Open the booking from the Bookings tab and show the QR voucher code to the supplier on the day. The code is stored on your device, so it works offline.",
+    a: "Open the booking from the Bookings tab and show your booking reference to the supplier on the day. The reference is stored on your device, so it works offline.",
   },
   {
     q: "When will I be charged?",

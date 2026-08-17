@@ -6,7 +6,6 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { QRCodePlaceholder } from "@/components/QRCodePlaceholder";
 import { DEMO_SUPPLIER_ID } from "@/constants/demo";
 import {
   useBookingInbox,
@@ -100,10 +99,11 @@ export default function SupplierBookingDetailScreen() {
         {booking.status === "confirmed" || booking.status === "completed" ? (
           <View className="bg-white rounded-2xl border border-ink-100 p-4 items-center">
             <Text className="text-sm font-bold text-ink-900 mb-3">Customer voucher</Text>
-            <QRCodePlaceholder token={booking.qrToken} size={120} />
-            <Text className="mt-3 text-xs font-mono text-ink-500">{booking.voucherCode}</Text>
-            <Text className="text-[11px] text-ink-400 mt-1 text-center">
-              Scan this at check-in to validate the booking.
+            <Text className="text-2xl font-extrabold text-brand-600 tracking-wide">
+              {booking.bookingRef}
+            </Text>
+            <Text className="text-[11px] text-ink-400 mt-2 text-center">
+              Ask the customer for their booking reference to verify and check in.
             </Text>
           </View>
         ) : null}

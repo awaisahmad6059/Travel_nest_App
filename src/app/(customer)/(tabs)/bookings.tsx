@@ -11,7 +11,7 @@ import type { BookingStatus } from "@/types";
 
 type Tab = "upcoming" | "completed" | "cancelled";
 
-const TABS: Array<{ id: Tab; label: string }> = [
+const TABS: { id: Tab; label: string }[] = [
   { id: "upcoming", label: "Upcoming" },
   { id: "completed", label: "Completed" },
   { id: "cancelled", label: "Cancelled" },

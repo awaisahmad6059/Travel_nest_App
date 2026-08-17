@@ -5,28 +5,6 @@ import { Platform } from "react-native";
 import type { Booking } from "@/types";
 import { formatDate, formatPrice } from "@/utils/format";
 
-/** Deterministic QR-ish glyph for the PDF (same seed idea as the on-screen QR). */
-function qrGridHtml(token: string, size = 13): string {
-  const seed = token
-    .split("")
-    .reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 997, 7);
-  const rand = (i: number) => (seed * (i + 5) + i * 17) % 10 < 5;
-  const cells: string[] = [];
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      const finder =
-        (row < 3 && col < 3) ||
-        (row < 3 && col >= size - 3) ||
-        (row >= size - 3 && col < 3);
-      const filled = finder ? rand(row * size + col) : rand(row * size + col);
-      cells.push(
-        `<div style="background:${filled ? "#14181f" : "#ffffff"};aspect-ratio:1;"></div>`,
-      );
-    }
-  }
-  return cells.join("");
-}
-
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -63,9 +41,10 @@ function voucherHtml(booking: Booking): string {
   .badge { display: inline-block; background: #10b981; color: #ffffff; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
   .option { font-size: 20px; font-weight: 700; }
   .lead { font-size: 13px; color: #64748b; margin-top: 4px; }
-  .qr-wrap { text-align: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; }
-  .qr-grid { display: grid; grid-template-columns: repeat(13, 1fr); width: 128px; height: 128px; margin: 0 auto; }
-  .qr-code { display: block; font-size: 10px; font-weight: 800; color: #0a54d9; margin-top: 6px; letter-spacing: 0.05em; }
+  .ref-wrap { text-align: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px 24px; }
+  .ref-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .ref-code { display: block; font-size: 24px; font-weight: 800; color: #0a54d9; letter-spacing: 0.04em; }
+  .ref-hint { font-size: 11px; color: #94a3b8; margin-top: 6px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 13px; }
   .grid .label { color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
   .grid .value { font-weight: 800; color: #0f172a; margin-top: 2px; }
@@ -83,7 +62,7 @@ function voucherHtml(booking: Booking): string {
 
     <div class="ok">&#10003;</div>
     <h1>Booking Confirmed!</h1>
-    <p class="sub">Your electronic QR ticket voucher has been dispatched to <strong>${escapeHtml(lead?.email ?? "")}</strong>.</p>
+    <p class="sub">Your electronic voucher has been dispatched to <strong>${escapeHtml(lead?.email ?? "")}</strong>.</p>
 
     <div class="ticket">
       <div class="ticket-head">
@@ -92,9 +71,10 @@ function voucherHtml(booking: Booking): string {
           <div class="option">${escapeHtml(item?.optionName ?? item?.title ?? "")}</div>
           <div class="lead">Lead Guest: <strong>${escapeHtml(lead?.name ?? "")}</strong> (${escapeHtml(lead?.phone ?? "")})</div>
         </div>
-        <div class="qr-wrap">
-          <div class="qr-grid">${qrGridHtml(booking.qrToken)}</div>
-          <span class="qr-code">${escapeHtml(booking.voucherCode)}</span>
+        <div class="ref-wrap">
+          <div class="ref-label">Booking Reference</div>
+          <span class="ref-code">${escapeHtml(booking.bookingRef)}</span>
+          <div class="ref-hint">Show this reference at check-in</div>
         </div>
       </div>
 
@@ -127,7 +107,7 @@ function voucherHtml(booking: Booking): string {
     </div>
 
     <p style="text-align:center;font-size:12px;color:#475569;margin-top:4px;">
-      Show this QR code to the supplier to check in. Voucher is also saved offline in My Bookings.
+      Show your booking reference to the supplier to check in. Voucher is also saved offline in My Bookings.
     </p>
 
     <div class="footer">Powered by TravelNest · © ${new Date().getFullYear()} TravelNest Tours</div>

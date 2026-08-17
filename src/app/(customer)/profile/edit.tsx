@@ -87,14 +87,8 @@ export default function EditProfileScreen() {
             onChangeText={setName}
             placeholder="Your name"
           />
-          <View>
-            <Text className="text-sm font-medium text-ink-800 mb-1.5">Email</Text>
-            <View className="bg-ink-50 border border-ink-100 rounded-xl px-4 py-3">
-              <Text className="text-base text-ink-400">{user?.email}</Text>
-            </View>
-          </View>
           <Text className="text-xs text-ink-400">
-            Your display name is saved on this device. The photo is kept for this session.
+            Your display name is saved on this device.
           </Text>
         </View>
 

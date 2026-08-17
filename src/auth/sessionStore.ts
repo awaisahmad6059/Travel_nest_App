@@ -11,13 +11,15 @@ interface SessionState {
   session: AuthSession | null;
   user: User | null;
   hydrate: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, expectedRole?: User["role"]) => Promise<User>;
   signUp: (input: {
     name: string;
     email: string;
     password: string;
     role: User["role"];
   }) => Promise<void>;
+  continueAsGuest: () => void;
+  setSession: (session: AuthSession) => void;
   signOut: () => Promise<void>;
 }
 
@@ -66,10 +68,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  async signIn(email: string, password: string) {
+  async signIn(email: string, password: string, expectedRole?: User["role"]): Promise<User> {
     const session = await authApi.signIn({ email, password });
+    if (expectedRole && session.user.role !== expectedRole) {
+      throw new Error(
+        expectedRole === "supplier"
+          ? "This is a customer account. Please use the Travel tab."
+          : "This is a supplier account. Please use the Supplier tab.",
+      );
+    }
     persist(session);
     set({ session, user: session.user, status: "authenticated" });
+    return session.user;
   },
 
   async signUp(input) {
@@ -91,6 +101,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set({ session: null, user: null, status: "signedOut" });
     }
   },
+
+  continueAsGuest() {
+    const guestUser: User = {
+      id: "guest",
+      name: "Traveler",
+      email: "",
+      role: "customer",
+      avatarEmoji: "🧳",
+    };
+    const guestSession: AuthSession = {
+      accessToken: "guest",
+      refreshToken: "guest",
+      user: guestUser,
+    };
+    persist(guestSession);
+    set({ session: guestSession, user: guestUser, status: "authenticated" });
+  },
+
+  setSession(session: AuthSession) {
+    persist(session);
+    set({ session, user: session.user, status: "authenticated" });
+  },
 }));
 
 /** Convenience selector for UI: { status, user } and role helpers. */
@@ -100,6 +132,8 @@ export function useSession() {
   const signIn = useSessionStore((s) => s.signIn);
   const signUp = useSessionStore((s) => s.signUp);
   const signOut = useSessionStore((s) => s.signOut);
+  const continueAsGuest = useSessionStore((s) => s.continueAsGuest);
+  const setSession = useSessionStore((s) => s.setSession);
   const hydrate = useSessionStore((s) => s.hydrate);
-  return { status, user, role: user?.role ?? null, signIn, signUp, signOut, hydrate };
+  return { status, user, role: user?.role ?? null, signIn, signUp, signOut, continueAsGuest, setSession, hydrate };
 }

@@ -3,12 +3,12 @@ import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 
 import { bookingApi } from "@/api/bookingApi";
 import { BookingStatusBadge } from "@/components/BookingStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { QRCodePlaceholder } from "@/components/QRCodePlaceholder";
 import { useBooking } from "@/features/booking/useBookings";
 import { formatDate, formatPrice } from "@/utils/format";
 
@@ -17,6 +17,7 @@ export default function BookingDetailScreen() {
   const router = useRouter();
   const { data: booking, isLoading } = useBooking(id);
   const [cancelling, setCancelling] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   async function requestCancel() {
     Alert.alert(
@@ -32,7 +33,7 @@ export default function BookingDetailScreen() {
             try {
               await bookingApi.cancelBooking(id, "Customer request");
               Alert.alert("Cancellation requested", "We've sent your request to the supplier.");
-            } catch (e) {
+            } catch {
               Alert.alert("Something went wrong", "Please try again.");
             } finally {
               setCancelling(false);
@@ -54,7 +55,13 @@ export default function BookingDetailScreen() {
   }
 
   const first = booking.items[0];
-  const hasVoucher = booking.status === "confirmed" && booking.voucherCode;
+  const hasVoucher = booking.status === "confirmed" && booking.bookingRef;
+
+  async function copyRef() {
+    await Clipboard.setStringAsync(booking!.bookingRef);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-surface-100">
@@ -89,15 +96,27 @@ export default function BookingDetailScreen() {
         </View>
 
         {hasVoucher ? (
-          <View className="items-center bg-white rounded-2xl border border-ink-100 p-5">
+          <Pressable
+            onPress={copyRef}
+            className="items-center bg-white rounded-2xl border border-ink-100 p-5"
+          >
             <Text className="text-sm font-bold text-ink-900 mb-3">
-              E-voucher — save offline 📱
+              E-voucher — show this reference at check-in
             </Text>
-            <QRCodePlaceholder token={booking.qrToken} size={200} />
-            <Text className="mt-3 text-xs text-ink-400">
-              Show this code to the supplier to check in.
+            <Text className="text-2xl font-extrabold text-brand-600 tracking-wide">
+              {booking.bookingRef}
             </Text>
-          </View>
+            <View className="flex-row items-center gap-1 mt-2">
+              <Ionicons
+                name={copied ? "checkmark-circle" : "copy-outline"}
+                size={16}
+                color={copied ? "#059669" : "#0a54d9"}
+              />
+              <Text className="text-xs font-semibold" style={{ color: copied ? "#059669" : "#0a54d9" }}>
+                {copied ? "Copied!" : "Tap to copy reference"}
+              </Text>
+            </View>
+          </Pressable>
         ) : null}
 
         <View className="bg-white rounded-2xl border border-ink-100 p-4 gap-2">

@@ -22,7 +22,7 @@
 export const USE_MOCKS_LISTINGS = false;
 export const USE_MOCKS_AVAILABILITY = false;
 export const USE_MOCKS_BOOKINGS = false;
-export const USE_MOCKS_AUTH = true;
+export const USE_MOCKS_AUTH = false;
 export const USE_MOCKS_REVIEWS = false;
 export const USE_MOCKS_SUPPLIER = true;
 export const USE_MOCKS_PAYMENTS = true;

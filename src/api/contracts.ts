@@ -505,7 +505,6 @@ export function bookingDtoToBooking(dto: BookingDTO): Booking {
     ],
     total: mapPrice(dto.gross_amount, currency),
     voucherCode: dto.qr_voucher_code,
-    qrToken: dto.qr_voucher_code,
     supplierId: dto.supplier_id ?? "",
   };
 }

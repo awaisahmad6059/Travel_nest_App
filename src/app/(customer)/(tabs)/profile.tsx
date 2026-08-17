@@ -1,11 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
-import { Alert, Image, Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 
 import { useSession } from "@/auth/sessionStore";
 import { Avatar } from "@/components/ui/Avatar";
 import { Screen } from "@/components/ui/Screen";
-import { Button } from "@/components/ui/Button";
 import { useNotifications } from "@/store/notificationStore";
 import { usePaymentMethodsStore } from "@/store/paymentMethodsStore";
 import { useProfileStore } from "@/store/profileStore";
@@ -70,81 +69,89 @@ export default function CustomerProfileScreen() {
     },
   ];
 
-  function onSignOut() {
-    Alert.alert("Sign out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign out", style: "destructive", onPress: () => void signOut() },
-    ]);
+  async function goToSupplierPortal() {
+    await signOut();
   }
 
   return (
-    <Screen className="bg-surface-100">
-      <View className="bg-brand-600 rounded-b-3xl px-5 pt-6 pb-8">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-white text-xl font-extrabold">Profile</Text>
+    <Screen className="bg-surface-100" contentContainerClassName="pb-24">
+        <View className="bg-brand-600 rounded-b-3xl px-5 pt-6 pb-8">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-white text-xl font-extrabold">Profile</Text>
+            <Pressable
+              onPress={() => router.push("/profile/notifications")}
+              hitSlop={8}
+              className="relative p-1"
+            >
+              <Ionicons name="notifications-outline" size={24} color="#ffffff" />
+              {unreadCount > 0 ? (
+                <View className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-danger-500 items-center justify-center px-1">
+                  <Text className="text-[10px] font-bold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
+
           <Pressable
-            onPress={() => router.push("/profile/notifications")}
-            hitSlop={8}
-            className="relative p-1"
+            className="mt-5 flex-row items-center gap-4"
+            onPress={() => router.push("/profile/edit")}
           >
-            <Ionicons name="notifications-outline" size={24} color="#ffffff" />
-            {unreadCount > 0 ? (
-              <View className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-danger-500 items-center justify-center px-1">
-                <Text className="text-[10px] font-bold text-white">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Text>
+            <View className="relative">
+              {avatarUri ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={{ width: 64, height: 64, borderRadius: 32 }}
+                />
+              ) : (
+                <Avatar emoji={user?.avatarEmoji} size={64} className="border-2 border-white/40" />
+              )}
+              <View className="absolute bottom-0 right-0 bg-white rounded-full p-1.5 border border-ink-100">
+                <Ionicons name="pencil" size={12} color="#0a54d9" />
               </View>
-            ) : null}
+            </View>
+            <View className="flex-1">
+              <Text className="text-white text-lg font-bold">{name}</Text>
+              <Text className="text-white/80 text-sm">Traveller</Text>
+            </View>
           </Pressable>
         </View>
 
-        <Pressable
-          className="mt-5 flex-row items-center gap-4"
-          onPress={() => router.push("/profile/edit")}
-        >
-          <View className="relative">
-            {avatarUri ? (
-              <Image
-                source={{ uri: avatarUri }}
-                style={{ width: 64, height: 64, borderRadius: 32 }}
-              />
-            ) : (
-              <Avatar emoji={user?.avatarEmoji} size={64} className="border-2 border-white/40" />
-            )}
-            <View className="absolute bottom-0 right-0 bg-white rounded-full p-1.5 border border-ink-100">
-              <Ionicons name="pencil" size={12} color="#0a54d9" />
-            </View>
-          </View>
-          <View className="flex-1">
-            <Text className="text-white text-lg font-bold">{name}</Text>
-            <Text className="text-white/80 text-sm">{user?.email}</Text>
-          </View>
-        </Pressable>
-      </View>
+        <View className="px-5 mt-6 gap-3">
+          {MENU.map((item) => (
+            <Pressable
+              key={item.label}
+              onPress={() => router.push(item.href)}
+              className="flex-row items-center bg-white rounded-2xl border border-ink-100 px-4 py-3.5"
+            >
+              <Ionicons name={item.icon} size={20} color="#0a54d9" />
+              <View className="flex-1 ml-3">
+                <Text className="text-sm font-semibold text-ink-900">{item.label}</Text>
+                <Text className="text-xs text-ink-400">{item.hint}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#b0b8c4" />
+            </Pressable>
+          ))}
 
-      <View className="px-5 mt-6 gap-3">
-        {MENU.map((item) => (
+          <View className="h-px bg-ink-100 my-2" />
+
           <Pressable
-            key={item.label}
-            onPress={() => router.push(item.href)}
-            className="flex-row items-center bg-white rounded-2xl border border-ink-100 px-4 py-3.5"
+            onPress={goToSupplierPortal}
+            className="flex-row items-center bg-violet-50 rounded-2xl border border-violet-200 px-4 py-3.5"
           >
-            <Ionicons name={item.icon} size={20} color="#0a54d9" />
+            <Ionicons name="business-outline" size={20} color="#7c3aed" />
             <View className="flex-1 ml-3">
-              <Text className="text-sm font-semibold text-ink-900">{item.label}</Text>
-              <Text className="text-xs text-ink-400">{item.hint}</Text>
+              <Text className="text-sm font-semibold text-violet-800">Supplier Portal</Text>
+              <Text className="text-xs text-violet-500">Sign in to manage your listings</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#b0b8c4" />
+            <Ionicons name="chevron-forward" size={18} color="#c4b5fd" />
           </Pressable>
-        ))}
 
-        <View className="h-px bg-ink-100 my-2" />
-
-        <Button title="Sign out" variant="secondary" onPress={onSignOut} block />
-        <Text className="text-center text-xs text-ink-400 mt-4">
-          TravelNest v1.0.0 (demo build)
-        </Text>
-      </View>
+          <Text className="text-center text-xs text-ink-400 mt-4">
+            TravelNest v1.0.0
+          </Text>
+        </View>
     </Screen>
   );
 }
