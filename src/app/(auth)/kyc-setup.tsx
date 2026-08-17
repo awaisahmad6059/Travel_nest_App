@@ -11,7 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
+import { File as ExpoFile } from "expo-file-system";
 
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Button } from "@/components/ui/Button";
@@ -166,19 +166,14 @@ export default function KycSetupScreen() {
     const ext = fileUri.split(".").pop() || "jpg";
     const filePath = `${userId}/${Date.now()}-${docType.toLowerCase()}.${ext}`;
 
-    const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const binaryStr = atob(fileBase64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const bytes = await new ExpoFile(fileUri).bytes();
 
     const { error: storageError } = await supabase.storage
       .from("kyc-documents")
       .upload(filePath, bytes, { contentType: `image/${ext === "jpg" ? "jpeg" : ext}` });
     if (storageError) throw storageError;
 
-    const { error: dbError } = await supabase.from("kyc_documents").insert({
+    const { error: dbError } = await supabase.from("supplier_kyc_records").insert({
       supplier_id: userId,
       document_type: docType,
       file_path: filePath,

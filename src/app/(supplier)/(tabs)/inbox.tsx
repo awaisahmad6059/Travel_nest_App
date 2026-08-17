@@ -7,7 +7,7 @@ import { Screen } from "@/components/ui/Screen";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BookingStatusBadge } from "@/components/BookingStatusBadge";
-import { DEMO_SUPPLIER_ID } from "@/constants/demo";
+import { useSession } from "@/auth/sessionStore";
 import {
   useBookingInbox,
   useConfirmBooking,
@@ -27,7 +27,8 @@ const FILTERS: { key: BookingStatus | "all"; label: string }[] = [
 
 export default function SupplierInboxScreen() {
   const router = useRouter();
-  const { data, isLoading, isError, refetch } = useBookingInbox(DEMO_SUPPLIER_ID);
+  const { user } = useSession();
+  const { data, isLoading, isError, refetch } = useBookingInbox(user?.id ?? "");
   const [filter, setFilter] = useState<BookingStatus | "all">("all");
   const [rejectTarget, setRejectTarget] = useState<Booking | null>(null);
 

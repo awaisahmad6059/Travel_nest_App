@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "@/components/ui/Screen";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { DEMO_SUPPLIER_ID } from "@/constants/demo";
+import { useSession } from "@/auth/sessionStore";
 import { usePayouts } from "@/features/supplier/useSupplier";
 import { cn } from "@/utils/cn";
 import { formatPrice } from "@/utils/format";
@@ -17,7 +17,8 @@ const STATUS_STYLES: Record<Payout["status"], { label: string; dot: string }> = 
 };
 
 export default function SupplierPayoutsScreen() {
-  const { data, isLoading, isError, refetch } = usePayouts(DEMO_SUPPLIER_ID);
+  const { user } = useSession();
+  const { data, isLoading, isError, refetch } = usePayouts(user?.id ?? "");
 
   return (
     <Screen className="bg-surface-100">

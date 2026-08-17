@@ -57,4 +57,6 @@ export interface CreateBookingInput {
   paymentToken?: string;
   /** Free-text special requirements (optional). */
   specialRequirements?: string;
+  /** Supplier who owns the listing being booked. */
+  supplierId?: string;
 }

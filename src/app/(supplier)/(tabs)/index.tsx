@@ -6,14 +6,13 @@ import { Screen } from "@/components/ui/Screen";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BookingStatusBadge } from "@/components/BookingStatusBadge";
 import { useSession } from "@/auth/sessionStore";
-import { DEMO_SUPPLIER_ID } from "@/constants/demo";
 import { useSupplierDashboard } from "@/features/supplier/useSupplier";
 import { formatDate, formatPrice } from "@/utils/format";
 
 export default function SupplierDashboardScreen() {
   const router = useRouter();
   const { user } = useSession();
-  const { data, isLoading, isError, refetch } = useSupplierDashboard(DEMO_SUPPLIER_ID);
+  const { data, isLoading, isError, refetch } = useSupplierDashboard(user?.id ?? "");
 
   const supplierName = user?.name ?? "Your business";
 

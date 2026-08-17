@@ -5,13 +5,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/ui/Screen";
 import { Avatar } from "@/components/ui/Avatar";
 import { useSession } from "@/auth/sessionStore";
-import { DEMO_SUPPLIER_ID } from "@/constants/demo";
 import { useSupplierDashboard } from "@/features/supplier/useSupplier";
 
 export default function SupplierProfileScreen() {
   const router = useRouter();
   const { user, signOut } = useSession();
-  const { data } = useSupplierDashboard(DEMO_SUPPLIER_ID);
+  const { data } = useSupplierDashboard(user?.id ?? "");
 
   const supplier = data?.supplier;
 

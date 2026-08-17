@@ -48,7 +48,7 @@ export default function PaymentScreen() {
 
   const subtotal = draft ? draft.unitPrice * draft.quantity : 0;
   const currency = draft?.currency ?? "USD";
-  const needsHold = !!draft?.slotId;
+  const needsHold = !!draft?.slotId && !draft.slotId.startsWith("hold_demo_");
   const earliestExpiry = hold?.expiresAt ?? null;
   const holdsComplete = !needsHold || !!hold;
   const holdExpired = earliestExpiry != null && earliestExpiry <= now;
@@ -168,9 +168,10 @@ export default function PaymentScreen() {
         ],
         travelers,
         total: lineTotal,
-        holdId: draft.slotId ? hold?.holdId : undefined,
+        holdId: draft.slotId?.startsWith("hold_demo_") ? draft.slotId : (hold?.holdId ?? undefined),
         paymentToken,
         specialRequirements: specialRequirements.trim(),
+        supplierId: draft.supplierId,
       });
       console.log("[NAVDEBUG] pay(): AFTER createBooking, booking.id =", booking?.id, "bookingRef =", booking?.bookingRef);
 

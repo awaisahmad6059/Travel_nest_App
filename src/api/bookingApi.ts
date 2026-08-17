@@ -1,4 +1,5 @@
 import { USE_MOCKS_BOOKINGS } from "@/config";
+import { supabase } from "@/lib/supabase";
 import { request, mockDelay } from "./client";
 import { MOCK_BOOKINGS } from "@/mocks/bookings";
 import {
@@ -10,6 +11,64 @@ import {
 } from "./contracts";
 import { CachedVoucher, voucherCache } from "@/features/booking/voucherCache";
 import type { Booking, BookingStatus, CreateBookingInput, Price } from "@/types";
+
+/**
+ * After creating a booking (via NestJS backend or locally for demo holds),
+ * insert it into the Supabase `bookings` table so the web admin panel
+ * (https://travelnest-jet.vercel.app/admin/bookings) can see it.
+ */
+async function syncBookingToSupabase(
+  dto: BookingDTO | null,
+  voucher: CachedVoucher,
+  input: CreateBookingInput,
+) {
+  try {
+    const item = input.items[0];
+    const lead = input.travelers[0];
+    const platformFee = dto
+      ? dto.platform_fee
+      : Math.round(voucher.totalAmount * 0.1 * 100) / 100;
+    const supplierPayout = dto
+      ? dto.supplier_payout
+      : Math.round((voucher.totalAmount - platformFee) * 100) / 100;
+
+    const row: Record<string, unknown> = {
+      id: voucher.bookingId,
+      booking_reference: voucher.bookingRef,
+      customer_id: lead?.email ?? "guest",
+      listing_id: item?.listingId ?? voucher.listingId,
+      supplier_id: input.supplierId ?? voucher.supplierId ?? "sup-oceanic-tours",
+      option_id: "",
+      option_name: item?.optionName ?? voucher.optionName,
+      slot_id: voucher.slotId ?? "",
+      slot_start_time: item?.date ?? voucher.activityDate,
+      total_travelers: item?.quantity ?? 1,
+      gross_amount: voucher.totalAmount,
+      platform_fee: platformFee,
+      supplier_payout: supplierPayout,
+      currency: voucher.currency ?? "USD",
+      status: "CONFIRMED",
+      confirmation_type: "INSTANT",
+      qr_voucher_code: voucher.voucherCode,
+      traveler_details: {
+        lead_name: lead?.name ?? "",
+        lead_email: lead?.email ?? "",
+        lead_phone: lead?.phone ?? "",
+        special_requirements: input.specialRequirements ?? "",
+        guest_names: input.travelers.map((t) => t.name),
+      },
+      payment_intent_id: "",
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("bookings").insert(row);
+    if (error) {
+      console.warn("[bookingApi] Failed to sync booking to Supabase:", error.message);
+    }
+  } catch (e) {
+    console.warn("[bookingApi] Supabase sync error:", e);
+  }
+}
 
 /**
  * Bookings service (API_HANDOFF.md §4.3) — My Bookings (customer) and the
@@ -169,6 +228,8 @@ export const bookingApi = {
         travelers: input.travelers,
       };
       await voucherCache.saveVoucher(voucher);
+      // Sync to Supabase so web admin can see it
+      void syncBookingToSupabase(null, voucher, input);
       return mockDelay(cachedVoucherToBooking(voucher), 300);
     }
     if (!input.holdId) {
@@ -200,6 +261,8 @@ export const bookingApi = {
     voucher.thumbnail = bookedItem?.thumbnail;
     voucher.imageUrl = bookedItem?.imageUrl;
     await voucherCache.saveVoucher(voucher);
+    // Sync to Supabase so web admin panel can see this booking
+    void syncBookingToSupabase(dto, voucher, input);
     return cachedVoucherToBooking(voucher);
   },
 

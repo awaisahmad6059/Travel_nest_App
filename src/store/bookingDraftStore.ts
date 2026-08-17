@@ -19,6 +19,8 @@ export interface BookingDraft {
   slotId?: string;
   freeCancellation: boolean;
   instantConfirmation: boolean;
+  /** Supplier who owns this listing — needed for Supabase admin sync. */
+  supplierId?: string;
 }
 
 interface BookingDraftState {

@@ -186,6 +186,7 @@ export default function SupplierSignupScreen() {
 
       const pendingKyc = {
         userId,
+        fullName: fullName.trim(),
         businessType,
         solo: { location: soloLocation, phone: soloPhone, cnic: soloCnic, taxId: soloTaxId, currency: soloCurrency, idFile: soloIdFile },
         company: { name: companyName, location: companyLocation, email: companyEmail, phone: companyPhone, regNo: companyRegNo, taxId: companyTaxId, regDoc: companyRegDoc, insDoc: companyInsDoc, leadName, leadEmail, leadPhone, leadCurrency, leadIdFile },

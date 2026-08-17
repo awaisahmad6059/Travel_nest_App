@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
+import { File as ExpoFile } from "expo-file-system";
 
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/auth/sessionStore";
@@ -14,36 +14,59 @@ import { Screen } from "@/components/ui/Screen";
 const PENDING_KYC_KEY = "@travelnest_pending_kyc";
 
 async function uploadPendingKyc(userId: string, kycData: any) {
+  const documents: any[] = [];
+
   async function uploadFile(fileUri: string | null, docType: string) {
-    if (!fileUri) return;
+    if (!fileUri) return null;
     const ext = fileUri.split(".").pop() || "jpg";
     const filePath = `${userId}/${Date.now()}-${docType.toLowerCase()}.${ext}`;
-    const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const binaryStr = atob(fileBase64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const bytes = await new ExpoFile(fileUri).bytes();
     const { error: storageError } = await supabase.storage
       .from("kyc-documents")
       .upload(filePath, bytes, { contentType: `image/${ext === "jpg" ? "jpeg" : ext}` });
     if (storageError) throw storageError;
-    const { error: dbError } = await supabase.from("kyc_documents").insert({
-      supplier_id: userId,
-      document_type: docType,
-      file_path: filePath,
+    return {
+      doc_id: `doc-${Date.now()}-${documents.length + 1}`,
       status: "PENDING",
-    });
-    if (dbError) throw dbError;
+      doc_type: docType,
+      file_name: fileUri.split("/").pop() || "document",
+      file_path: filePath,
+    };
   }
 
   if (kycData.businessType === "solo") {
-    await uploadFile(kycData.solo?.idFile, "CNIC");
+    const doc = await uploadFile(kycData.solo?.idFile, "CNIC/Passport");
+    if (doc) documents.push(doc);
   } else if (kycData.businessType === "company") {
-    await uploadFile(kycData.company?.regDoc, "BUSINESS_LICENSE");
-    await uploadFile(kycData.company?.insDoc, "BUSINESS_LICENSE");
-    await uploadFile(kycData.company?.leadIdFile, "CNIC");
+    const regDoc = await uploadFile(kycData.company?.regDoc, "Business Registration");
+    if (regDoc) documents.push(regDoc);
+    const insDoc = await uploadFile(kycData.company?.insDoc, "Insurance Certificate");
+    if (insDoc) documents.push(insDoc);
+    const leadDoc = await uploadFile(kycData.company?.leadIdFile, "CNIC/Passport");
+    if (leadDoc) documents.push(leadDoc);
   }
+
+  // Insert a single row with ALL fields the web admin panel expects
+  const isSolo = kycData.businessType === "solo";
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    supplier_id: userId,
+    company_name: isSolo ? (kycData.fullName || "Solo Operator") : (kycData.company?.name || "Company"),
+    business_type: isSolo ? "SOLO" : "COMPANY",
+    location: isSolo ? kycData.solo?.location : kycData.company?.location,
+    phone: isSolo ? kycData.solo?.phone : kycData.company?.phone,
+    currency: isSolo ? kycData.solo?.currency : kycData.company?.leadCurrency,
+    business_reg: isSolo ? kycData.solo?.cnic : kycData.company?.regNo,
+    tax_id: isSolo ? kycData.solo?.taxId : kycData.company?.taxId,
+    status: "PENDING",
+    documents,
+    audit_reasons: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error: dbError } = await supabase.from("supplier_kyc_records").insert(row);
+  if (dbError) throw dbError;
 }
 
 export default function SupplierLoginScreen() {
@@ -116,7 +139,7 @@ export default function SupplierLoginScreen() {
 
       // Check KYC status in database
       const { data: kycDocs } = await supabase
-        .from("kyc_documents")
+        .from("supplier_kyc_records")
         .select("status")
         .eq("supplier_id", data.user.id)
         .order("created_at", { ascending: false })

@@ -35,6 +35,7 @@ import { useWishlist } from "@/store/wishlistStore";
 import { formatDate, formatLongDate } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import type { Listing, Review } from "@/types";
+import type { Slot } from "@/api/contracts";
 
 /** Formats a slot ISO datetime as "HH:mm". */
 function slotTime(iso: string): string {
@@ -431,11 +432,35 @@ function BookingSheet({
   const { setDraft } = useBookingDraft();
   const { data: slotsData, isLoading: slotsLoading } = useSlots(listing.id);
 
-  // Only real backend slots — no demo/placeholder dates (API_HANDOFF.md §4.2).
-  // Like the web, every slot the API returns is shown (seats reflect remaining).
-  const slots = (slotsData ?? []).sort(
+  // Backend slots, sorted by date.
+  const backendSlots = (slotsData ?? []).sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
   );
+
+  // Generate fallback slots for the next 7 days (same as web) when the backend
+  // returns 0 or very few real slots. These use "hold_demo_*" ids which are
+  // handled by the local demo-booking path in bookingApi.createBooking.
+  const fallbackSlots: Slot[] = (() => {
+    if (backendSlots.length >= 3) return backendSlots;
+    const generated: Slot[] = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(Date.now() + 86400000 * (i + 1));
+      date.setHours(10, 0, 0, 0);
+      generated.push({
+        id: `slot-${i}`,
+        listingId: listing.id,
+        startTime: date.toISOString(),
+        endTime: new Date(date.getTime() + (listing.duration ? parseInt(listing.duration) * 3600000 : 14400000)).toISOString(),
+        totalCapacity: 10,
+        bookedCapacity: 0,
+        heldCapacity: 0,
+        remaining: 10,
+      });
+    }
+    return [...backendSlots, ...generated];
+  })();
+
+  const slots = fallbackSlots;
 
   const [slotId, setSlotId] = useState<string | undefined>(undefined);
   const [optionId, setOptionId] = useState(listing.options[0]?.id ?? "");
@@ -449,6 +474,8 @@ function BookingSheet({
 
   function bookNow() {
     if (!option || !canBook) return;
+    // Fallback slots use demo hold ids — the checkout flow handles these locally.
+    const isDemoSlot = selectedSlot.id.startsWith("slot-");
     setDraft({
       listingId: listing.id,
       listingTitle: listing.title,
@@ -460,9 +487,10 @@ function BookingSheet({
       currency: option.price.currency,
       quantity: qty,
       date: selectedSlot?.startTime ?? "",
-      slotId: selectedSlot?.id,
+      slotId: isDemoSlot ? `hold_demo_${selectedSlot.id}` : selectedSlot?.id,
       freeCancellation: listing.freeCancellation,
       instantConfirmation: listing.instantConfirmation,
+      supplierId: listing.supplierId,
     });
     onClose();
     router.push("/checkout/travelers");

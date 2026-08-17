@@ -1,11 +1,10 @@
-import { documentDirectory, readAsStringAsync, writeAsStringAsync, getInfoAsync, makeDirectoryAsync, deleteAsync } from "expo-file-system/legacy";
+import { File, Directory, Paths } from "expo-file-system";
 
-const STORAGE_DIR = `${documentDirectory}supabase-auth/`;
+const STORAGE_DIR = new Directory(Paths.document, "supabase-auth");
 
 async function ensureDir() {
-  const dirInfo = await getInfoAsync(STORAGE_DIR);
-  if (!dirInfo.exists) {
-    await makeDirectoryAsync(STORAGE_DIR, { intermediates: true });
+  if (!STORAGE_DIR.exists) {
+    STORAGE_DIR.create();
   }
 }
 
@@ -13,10 +12,9 @@ export const fileSystemStorage = {
   async getItem(key: string): Promise<string | null> {
     try {
       await ensureDir();
-      const filePath = `${STORAGE_DIR}${key}.json`;
-      const info = await getInfoAsync(filePath);
-      if (!info.exists) return null;
-      return await readAsStringAsync(filePath);
+      const file = new File(STORAGE_DIR, `${key}.json`);
+      if (!file.exists) return null;
+      return await file.text();
     } catch {
       return null;
     }
@@ -25,17 +23,16 @@ export const fileSystemStorage = {
   async setItem(key: string, value: string): Promise<void> {
     try {
       await ensureDir();
-      const filePath = `${STORAGE_DIR}${key}.json`;
-      await writeAsStringAsync(filePath, value);
+      const file = new File(STORAGE_DIR, `${key}.json`);
+      await file.write(value);
     } catch {}
   },
 
   async removeItem(key: string): Promise<void> {
     try {
-      const filePath = `${STORAGE_DIR}${key}.json`;
-      const info = await getInfoAsync(filePath);
-      if (info.exists) {
-        await deleteAsync(filePath);
+      const file = new File(STORAGE_DIR, `${key}.json`);
+      if (file.exists) {
+        file.delete();
       }
     } catch {}
   },

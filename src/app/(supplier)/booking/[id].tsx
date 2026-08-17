@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { DEMO_SUPPLIER_ID } from "@/constants/demo";
+import { useSession } from "@/auth/sessionStore";
 import {
   useBookingInbox,
   useConfirmBooking,
@@ -17,7 +17,8 @@ import { formatDate, formatPrice } from "@/utils/format";
 export default function SupplierBookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data, isLoading } = useBookingInbox(DEMO_SUPPLIER_ID);
+  const { user } = useSession();
+  const { data, isLoading } = useBookingInbox(user?.id ?? "");
   const [showReject, setShowReject] = useState(false);
 
   const booking = data?.find((b) => b.id === id);
