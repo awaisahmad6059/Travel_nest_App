@@ -2,12 +2,49 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
 
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/auth/sessionStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Screen } from "@/components/ui/Screen";
+
+const PENDING_KYC_KEY = "@travelnest_pending_kyc";
+
+async function uploadPendingKyc(userId: string, kycData: any) {
+  async function uploadFile(fileUri: string | null, docType: string) {
+    if (!fileUri) return;
+    const ext = fileUri.split(".").pop() || "jpg";
+    const filePath = `${userId}/${Date.now()}-${docType.toLowerCase()}.${ext}`;
+    const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const binaryStr = atob(fileBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const { error: storageError } = await supabase.storage
+      .from("kyc-documents")
+      .upload(filePath, bytes, { contentType: `image/${ext === "jpg" ? "jpeg" : ext}` });
+    if (storageError) throw storageError;
+    const { error: dbError } = await supabase.from("kyc_documents").insert({
+      supplier_id: userId,
+      document_type: docType,
+      file_path: filePath,
+      status: "PENDING",
+    });
+    if (dbError) throw dbError;
+  }
+
+  if (kycData.businessType === "solo") {
+    await uploadFile(kycData.solo?.idFile, "CNIC");
+  } else if (kycData.businessType === "company") {
+    await uploadFile(kycData.company?.regDoc, "BUSINESS_LICENSE");
+    await uploadFile(kycData.company?.insDoc, "BUSINESS_LICENSE");
+    await uploadFile(kycData.company?.leadIdFile, "CNIC");
+  }
+}
 
 export default function SupplierLoginScreen() {
   const router = useRouter();
@@ -46,7 +83,38 @@ export default function SupplierLoginScreen() {
 
       const name = data.user.user_metadata?.full_name ?? data.user.user_metadata?.name ?? "Supplier";
 
-      // Check KYC status
+      const userObj = {
+        id: data.user.id,
+        name,
+        email: data.user.email ?? "",
+        role: "supplier" as const,
+        avatarEmoji: "🏔️",
+      };
+
+      setSession({
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        user: userObj,
+      });
+
+      // Check for pending KYC from signup
+      const pendingRaw = await AsyncStorage.getItem(PENDING_KYC_KEY);
+      if (pendingRaw) {
+        try {
+          const pendingKyc = JSON.parse(pendingRaw);
+          if (pendingKyc.userId === data.user.id) {
+            await uploadPendingKyc(data.user.id, pendingKyc);
+            await AsyncStorage.removeItem(PENDING_KYC_KEY);
+            router.replace("/pending-approval");
+            return;
+          }
+        } catch (kycErr) {
+          console.error("[KYC UPLOAD]", kycErr);
+          await AsyncStorage.removeItem(PENDING_KYC_KEY);
+        }
+      }
+
+      // Check KYC status in database
       const { data: kycDocs } = await supabase
         .from("kyc_documents")
         .select("status")
@@ -56,59 +124,21 @@ export default function SupplierLoginScreen() {
 
       const kycStatus = kycDocs?.[0]?.status;
 
-      // No KYC docs → needs to complete KYC form
       if (!kycDocs || kycDocs.length === 0) {
-        setSession({
-          accessToken: data.session.access_token,
-          refreshToken: data.session.refresh_token,
-          user: {
-            id: data.user.id,
-            name,
-            email: data.user.email ?? "",
-            role: "supplier",
-            avatarEmoji: "🏔️",
-          },
-        });
-        router.replace("/kyc-setup");
-        return;
-      }
-
-      // KYC pending review
-      if (kycStatus === "PENDING") {
-        setSession({
-          accessToken: data.session.access_token,
-          refreshToken: data.session.refresh_token,
-          user: {
-            id: data.user.id,
-            name,
-            email: data.user.email ?? "",
-            role: "supplier",
-            avatarEmoji: "🏔️",
-          },
-        });
         router.replace("/pending-approval");
         return;
       }
 
-      // KYC rejected
+      if (kycStatus === "PENDING") {
+        router.replace("/pending-approval");
+        return;
+      }
+
       if (kycStatus === "REJECTED") {
         await supabase.auth.signOut();
         setError("Your account verification was not approved. Please contact support.");
         return;
       }
-
-      // KYC approved → supplier panel
-      setSession({
-        accessToken: data.session.access_token,
-        refreshToken: data.session.refresh_token,
-        user: {
-          id: data.user.id,
-          name,
-          email: data.user.email ?? "",
-          role: "supplier",
-          avatarEmoji: "🏔️",
-        },
-      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login failed.");
     } finally {

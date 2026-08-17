@@ -7,7 +7,6 @@ export default function AuthLayout() {
       <Stack.Screen name="supplier-login" />
       <Stack.Screen name="supplier-signup" />
       <Stack.Screen name="pending-approval" />
-      <Stack.Screen name="kyc-setup" />
     </Stack>
   );
 }
