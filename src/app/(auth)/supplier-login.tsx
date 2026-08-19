@@ -2,10 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { File as ExpoFile } from "expo-file-system";
 
 import { supabase } from "@/lib/supabase";
+import { fileSystemStorage } from "@/lib/fileSystemStorage";
 import { useSession } from "@/auth/sessionStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -50,7 +50,6 @@ async function uploadPendingKyc(userId: string, kycData: any) {
   const isSolo = kycData.businessType === "solo";
   const row: Record<string, unknown> = {
     user_id: userId,
-    supplier_id: userId,
     company_name: isSolo ? (kycData.fullName || "Solo Operator") : (kycData.company?.name || "Company"),
     business_type: isSolo ? "SOLO" : "COMPANY",
     location: isSolo ? kycData.solo?.location : kycData.company?.location,
@@ -114,54 +113,97 @@ export default function SupplierLoginScreen() {
         avatarEmoji: "🏔️",
       };
 
-      setSession({
+      const userSession = {
         accessToken: data.session.access_token,
         refreshToken: data.session.refresh_token,
         user: userObj,
-      });
+      };
 
-      // Check for pending KYC from signup
-      const pendingRaw = await AsyncStorage.getItem(PENDING_KYC_KEY);
+      // Check for pending KYC from signup BEFORE setting session.
+      // If pending KYC exists, this is a fresh signup — keep user in auth flow
+      // so (auth)/pending-approval is accessible.
+      const pendingRaw = await fileSystemStorage.getItem(PENDING_KYC_KEY);
       if (pendingRaw) {
         try {
           const pendingKyc = JSON.parse(pendingRaw);
           if (pendingKyc.userId === data.user.id) {
-            await uploadPendingKyc(data.user.id, pendingKyc);
-            await AsyncStorage.removeItem(PENDING_KYC_KEY);
+            // Try upload with retry (user may not be fully committed in auth.users yet)
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                await uploadPendingKyc(data.user.id, pendingKyc);
+                break;
+              } catch (uploadErr) {
+                console.error(`[KYC UPLOAD] attempt ${attempt} failed`, uploadErr);
+                if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+              }
+            }
+            await fileSystemStorage.removeItem(PENDING_KYC_KEY);
+            // Navigate to pending-approval while still in auth flow (no setSession yet)
             router.replace("/pending-approval");
             return;
           }
         } catch (kycErr) {
-          console.error("[KYC UPLOAD]", kycErr);
-          await AsyncStorage.removeItem(PENDING_KYC_KEY);
+          console.error("[KYC]", kycErr);
+          await fileSystemStorage.removeItem(PENDING_KYC_KEY);
         }
       }
 
-      // Check KYC status in database
-      const { data: kycDocs } = await supabase
-        .from("supplier_kyc_records")
-        .select("status")
-        .eq("supplier_id", data.user.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
+      // Check KYC status via web admin API (uses service_role, bypasses RLS).
+      // This is the only reliable way since profiles RLS causes infinite recursion.
+      try {
+        const kyResp = await fetch("https://travelnest-jet.vercel.app/api/admin/kyc");
+        if (kyResp.ok) {
+          const allKyc: Array<{
+            user_id: string;
+            status: string;
+            audit_reasons: unknown;
+          }> = await kyResp.json();
+          const myKyc = allKyc.find((r) => r.user_id === data.user.id);
 
-      const kycStatus = kycDocs?.[0]?.status;
+          if (myKyc) {
+            const kycStatus = myKyc.status;
+            const feedback = Array.isArray(myKyc.audit_reasons)
+              ? myKyc.audit_reasons
+              : [];
+            const feedbackJson = encodeURIComponent(JSON.stringify(feedback));
 
-      if (!kycDocs || kycDocs.length === 0) {
-        router.replace("/pending-approval");
-        return;
+            if (kycStatus === "PENDING") {
+              setSession(userSession);
+              router.replace("/pending-approval");
+              return;
+            }
+            if (kycStatus === "CHANGES_REQUESTED") {
+              setSession(userSession);
+              router.replace({
+                pathname: "/kyc-action-required",
+                params: { feedback: feedbackJson, userId: data.user.id },
+              });
+              return;
+            }
+            if (kycStatus === "REJECTED") {
+              setSession(userSession);
+              router.replace({
+                pathname: "/kyc-rejected",
+                params: { feedback: feedbackJson },
+              });
+              return;
+            }
+            if (kycStatus === "SUSPENDED") {
+              setSession(userSession);
+              router.replace("/kyc-suspended");
+              return;
+            }
+            // APPROVED → continue to dashboard
+          } else {
+            console.warn("[KYC] No KYC record found for user", data.user.id);
+          }
+        }
+      } catch (statusErr) {
+        console.error("[KYC STATUS CHECK] exception", statusErr);
       }
 
-      if (kycStatus === "PENDING") {
-        router.replace("/pending-approval");
-        return;
-      }
-
-      if (kycStatus === "REJECTED") {
-        await supabase.auth.signOut();
-        setError("Your account verification was not approved. Please contact support.");
-        return;
-      }
+      // All checks passed — set session and go to dashboard
+      setSession(userSession);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login failed.");
     } finally {

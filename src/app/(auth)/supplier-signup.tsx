@@ -11,7 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { fileSystemStorage } from "@/lib/fileSystemStorage";
 
 import { SafeAreaView } from "@/components/ui/SafeAreaView";
 import { Button } from "@/components/ui/Button";
@@ -191,7 +191,7 @@ export default function SupplierSignupScreen() {
         solo: { location: soloLocation, phone: soloPhone, cnic: soloCnic, taxId: soloTaxId, currency: soloCurrency, idFile: soloIdFile },
         company: { name: companyName, location: companyLocation, email: companyEmail, phone: companyPhone, regNo: companyRegNo, taxId: companyTaxId, regDoc: companyRegDoc, insDoc: companyInsDoc, leadName, leadEmail, leadPhone, leadCurrency, leadIdFile },
       };
-      await AsyncStorage.setItem(PENDING_KYC_KEY, JSON.stringify(pendingKyc));
+      await fileSystemStorage.setItem(PENDING_KYC_KEY, JSON.stringify(pendingKyc));
 
       Alert.alert(
         "Account Created",
